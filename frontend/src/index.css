@@ -37,3 +37,7 @@
     @apply block text-sm font-medium text-gray-700 mb-2;
   }
 }
+
+/* Import the dashboard theme last so it can override component styles */
+@import './styles/dashboard-sky.css';
+

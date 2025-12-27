@@ -15,10 +15,21 @@ module.exports = {
       console.log(`[PHARMACIST GET] user=${req.user?.id || 'anon'} role=${req.user?.role || 'none'} status=${status} q=${q || ''}`);
 
       const whereClause = {};
+      // Support multiple ways to ask for status (single value, comma-separated, or array)
+      // and treat 'prescribed' as including 'active' so recently issued items show up.
+      let statuses = null;
       if (status && status !== 'all') {
-        whereClause.status = status;
-      } else if (!status) {
-        whereClause.status = 'prescribed';
+        if (Array.isArray(status)) {
+          statuses = status.map(s => String(s).toLowerCase().trim());
+        } else {
+          statuses = String(status).split(',').map(s => s.toLowerCase().trim());
+        }
+        // If 'prescribed' requested, include 'active'
+        if (statuses.includes('prescribed') && !statuses.includes('active')) statuses.push('active');
+        whereClause.status = { [Op.in]: statuses };
+      } else {
+        // Default to both prescribed and active
+        whereClause.status = { [Op.in]: ['prescribed', 'active'] };
       }
 
       if (q) {
@@ -41,27 +52,34 @@ module.exports = {
           offset: parseInt(offset)
         });
 
-        // If DB returned zero results, attempt to include any in-memory prescriptions as a fallback
-        let finalPrescriptions = prescriptions;
-        let finalCount = count;
+        // Merge DB prescriptions with any in-memory prescriptions (dedupe by id)
+        let finalPrescriptions = prescriptions || [];
+        let finalCount = count || 0;
         try {
-          if ((!Array.isArray(prescriptions) || prescriptions.length === 0) && Array.isArray(global.prescriptions) && global.prescriptions.length > 0) {
-            console.warn('No DB prescriptions returned; merging in-memory prescriptions for pharmacist view');
-            // Accept common statuses for display
-            const acceptable = ['prescribed', 'active'];
-            let memList = global.prescriptions.filter(p => acceptable.includes((p.status || '').toString().toLowerCase().trim()));
+          if (Array.isArray(global.prescriptions) && global.prescriptions.length > 0) {
+            console.warn('Merging in-memory prescriptions into pharmacist view (deduping)');
+            // Determine desired statuses from whereClause (if set) or default
+            const desiredStatuses = Array.isArray(whereClause.status?.[Op.in]) ? whereClause.status[Op.in] : (whereClause.status ? [whereClause.status] : ['prescribed', 'active']);
+            const desiredLower = desiredStatuses.map(s => String(s).toLowerCase().trim());
+
+            let memList = global.prescriptions.filter(p => desiredLower.includes((p.status || '').toString().toLowerCase().trim()));
             if (q) memList = memList.filter(p => p.medication && p.medication.toLowerCase().includes(q.toLowerCase()));
 
             // Enrich memList with patient/doctor info from global.users
             const usersMap = Array.isArray(global.users) ? global.users.reduce((m, u) => { m[u.id] = u; return m; }, {}) : {};
-            const enriched = memList.map(p => ({
+            const enrichedMem = memList.map(p => ({
               ...p,
               patient: usersMap[p.patientId] ? { id: usersMap[p.patientId].id, first_name: usersMap[p.patientId].first_name || usersMap[p.patientId].name || usersMap[p.patientId].username, last_name: usersMap[p.patientId].last_name } : null,
               doctor: usersMap[p.doctorId] ? { id: usersMap[p.doctorId].id, first_name: usersMap[p.doctorId].first_name || usersMap[p.doctorId].name || usersMap[p.doctorId].username, last_name: usersMap[p.doctorId].last_name } : null
             }));
 
-            finalPrescriptions = enriched.slice(0, parseInt(limit));
-            finalCount = enriched.length;
+            // Dedupe: prefer DB rows, then append mem ones that are missing
+            const dbIds = new Set((finalPrescriptions || []).map(p => String(p.id)));
+            const toAdd = enrichedMem.filter(p => !dbIds.has(String(p.id)));
+
+            const combined = [...(finalPrescriptions || []), ...toAdd];
+            finalPrescriptions = combined.slice(0, parseInt(limit));
+            finalCount = combined.length;
           }
         } catch (mergeErr) {
           console.warn('Failed to merge in-memory prescriptions:', mergeErr);

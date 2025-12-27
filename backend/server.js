@@ -258,6 +258,52 @@ app.get('/api/dev/prescriptions', (req, res) => {
     }
 });
 
+// DEV POST route to add an in-memory prescription (debugging only)
+app.post('/api/dev/prescriptions', (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(403).json({ success: false, error: 'Forbidden in production' });
+
+    try {
+        const { patientId, doctorId, medication, dosage = 'Not specified', frequency = 'Not specified', status = 'prescribed', instructions = '' } = req.body || {};
+        if (!patientId || !doctorId || !medication) return res.status(400).json({ success: false, error: 'patientId, doctorId and medication are required' });
+
+        if (!Array.isArray(global.prescriptions)) global.prescriptions = [];
+        const newId = (global.prescriptions.length ? (global.prescriptions[0].id || Date.now()) + 1 : Date.now());
+        const record = {
+            id: newId,
+            patientId,
+            doctorId,
+            medication,
+            dosage,
+            frequency,
+            instructions,
+            status,
+            dateIssued: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        global.prescriptions.unshift(record);
+        console.log(`[DEV ROUTE] Added in-memory prescription id=${record.id}`);
+        return res.status(201).json({ success: true, data: record });
+    } catch (err) {
+        console.error('DEV POST route error:', err);
+        return res.status(500).json({ success: false, error: 'Dev endpoint error' });
+    }
+});
+
+// DEV: expose database-backed prescriptions for debugging (not for production)
+app.get('/api/dev/db-prescriptions', async (req, res) => {
+    if (process.env.NODE_ENV === 'production') return res.status(403).json({ success: false, error: 'Forbidden in production' });
+    try {
+        const Prescription = require('./models/prescription');
+        const list = await Prescription.findAll({ order: [['createdAt', 'DESC']], limit: 200 });
+        console.log(`[DEV ROUTE] /api/dev/db-prescriptions requested - returning ${list.length} items`);
+        return res.json({ success: true, count: list.length, data: list });
+    } catch (err) {
+        console.error('DEV db-prescriptions route error:', err);
+        return res.status(500).json({ success: false, error: 'Dev DB endpoint error' });
+    }
+});
+
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Server is working!' });
 });
@@ -1041,15 +1087,29 @@ app.get('/api/reception/appointment-requests', (req, res) => {
     });
 });
 
-// NEW: Available doctors endpoint
+// NEW: Available doctors endpoint (dynamic from in-memory users when DB is unavailable)
 app.get('/api/reception/available-doctors', (req, res) => {
     console.log('👨‍⚕️ Available doctors requested');
-    
-    const availableDoctors = [
-        { id: 1, name: 'Dr. Michael Brown', specialization: 'General Physician', availableSlots: 5 },
-        { id: 2, name: 'Dr. Sarah Johnson', specialization: 'Cardiologist', availableSlots: 3 },
-        { id: 3, name: 'Dr. James Wilson', specialization: 'Pediatrician', availableSlots: 7 }
-    ];
+
+    // Prefer using the in-memory users array for quick dev response
+    const availableDoctors = (users || []).filter(u => (u.role === 'doctor' || u.role === 'doctor_user' || u.role === 'physician') && (u.isActive !== false)).map(u => {
+        const displayName = u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || `Dr. ${u.id}`;
+        return {
+            id: u.id,
+            name: displayName.startsWith('Dr') ? displayName : `Dr. ${displayName}`,
+            specialization: u.specialization || 'General Physician',
+            availableSlots: Math.max(0, Math.min(8, Math.floor((u.availableSlots || 3))))
+        };
+    });
+
+    // If no registered doctors found, fall back to the default sample list
+    if (availableDoctors.length === 0) {
+        availableDoctors.push(
+            { id: 1, name: 'Dr. Michael Brown', specialization: 'General Physician', availableSlots: 5 },
+            { id: 2, name: 'Dr. Sarah Johnson', specialization: 'Cardiologist', availableSlots: 3 },
+            { id: 3, name: 'Dr. James Wilson', specialization: 'Pediatrician', availableSlots: 7 }
+        );
+    }
 
     res.json({
         success: true,

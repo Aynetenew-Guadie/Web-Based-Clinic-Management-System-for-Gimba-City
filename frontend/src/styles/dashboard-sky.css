@@ -1,0 +1,58 @@
+/* Smart Sky dashboard theme: airy blue palette for a calm, modern look */
+:root {
+  --dash-bg: #f0f7ff; /* very light sky */
+  --dash-surface: #ffffff;
+  --dash-muted: #5b6b85; /* cool gray-blue */
+  --primary: #0ea5ff; /* sky-blue */
+  --primary-600: #0284c7; /* deep sky */
+  --accent: #60a5fa; /* soft blue */
+  --accent-700: #2563eb;
+  --success: #10b981;
+  --danger: #ef4444;
+  --glass: rgba(255,255,255,0.65);
+  --card-shadow: 0 8px 24px rgba(2, 120, 205, 0.06);
+}
+
+.dashboard-root {
+  background: linear-gradient(180deg, var(--dash-bg), #fafcff);
+  min-height: 100vh;
+}
+
+.dashboard-topbar {
+  background: linear-gradient(90deg, rgba(14,165,255,0.06), rgba(96,165,250,0.03));
+  border-bottom: 1px solid rgba(14,165,255,0.06);
+}
+
+.dashboard-header { padding: 1.25rem 1rem; }
+.dashboard-title { font-weight: 700; color: var(--primary-600); font-size: 1.15rem; }
+
+.card { background: var(--dash-surface); border-radius: 0.75rem; box-shadow: var(--card-shadow); border: 1px solid rgba(6,40,80,0.04); }
+.card:hover { transform: translateY(-3px); transition: transform 180ms ease-out; }
+
+.card-accent { border-left: 4px solid var(--accent); }
+
+.dashboard-sidebar { background: linear-gradient(180deg, rgba(14,165,255,0.02), transparent); }
+.sidebar-item:hover { background: rgba(14,165,255,0.03); color: var(--primary-600); }
+.sidebar-item-active { background: linear-gradient(90deg, rgba(14,165,255,0.08), rgba(96,165,250,0.02)); color: var(--primary-600) !important; font-weight: 600; }
+
+.prescription-badge { display: inline-block; padding: 0.225rem 0.5rem; border-radius: 9999px; background: linear-gradient(90deg, rgba(14,165,255,0.08), rgba(14,165,255,0.03)); color: var(--dash-muted); font-weight: 600; font-size: 0.8rem; }
+.prescription-badge--prescribed { color: var(--primary-600); }
+.prescription-badge--dispensed { color: var(--success); }
+.prescription-badge--cancelled { color: var(--danger); }
+
+.empty-state { text-align: center; padding: 3rem 1rem; color: var(--dash-muted); }
+.empty-state .empty-cta { margin-top: 1rem; display: inline-block; padding: 0.5rem 1rem; background: var(--primary); color: white; border-radius: 0.5rem; box-shadow: 0 6px 16px rgba(14,165,255,0.12); }
+
+.btn-accent { background: linear-gradient(90deg, var(--primary), var(--accent)); color: white; padding: 0.5rem 0.85rem; border-radius: 0.5rem; font-weight: 600; box-shadow: 0 8px 24px rgba(14,165,255,0.08); }
+.btn-outline-soft { background: transparent; border: 1px solid rgba(6,40,80,0.06); padding: 0.4rem 0.7rem; border-radius: 0.5rem; }
+
+.text-muted { color: var(--dash-muted); }
+.small { font-size: 0.85rem; }
+
+.input-field:focus { box-shadow: 0 0 0 6px rgba(14,165,255,0.06); border-color: var(--primary); }
+
+.prescription-card { padding: 1rem; display: flex; gap: 1.25rem; align-items: flex-start; }
+.prescription-card h4 { margin: 0; color: var(--primary-600); }
+.prescription-card .meta { color: var(--dash-muted); font-size: 0.9rem; }
+
+@media (max-width: 640px) { .dashboard-header { padding: 0.75rem; } .dashboard-card { padding: 0.85rem; } }

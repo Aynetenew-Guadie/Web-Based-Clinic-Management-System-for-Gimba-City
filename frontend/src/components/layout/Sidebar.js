@@ -88,7 +88,7 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="bg-white shadow-lg w-64 min-h-screen flex flex-col">
+    <div className="bg-white shadow-lg w-64 min-h-screen flex flex-col dashboard-sidebar">
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">

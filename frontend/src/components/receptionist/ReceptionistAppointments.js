@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Calendar, Clock, User, MapPin, Plus, Filter, Loader, Search, Edit, X } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Calendar, Clock, User, MapPin, Plus, Filter, Loader, Search, Edit, X, RefreshCw } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { 
   scheduleAppointment, 
@@ -36,6 +36,8 @@ const ReceptionistAppointments = () => {
   const [doctorSearch, setDoctorSearch] = useState('')
   const [showPatientDropdown, setShowPatientDropdown] = useState(false)
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false)
+  const patientDropdownRef = useRef(null)
+  const doctorDropdownRef = useRef(null)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [approvalDetails, setApprovalDetails] = useState({
@@ -74,11 +76,19 @@ const ReceptionistAppointments = () => {
   const filteredDoctorOptions = Array.isArray(doctors)
     ? doctors.filter(doctor => {
         const searchLower = (doctorSearch || '').toLowerCase()
-        const fullName = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase()
+        // Support multiple possible name keys coming from different endpoints
+        const fullName = `${doctor.first_name || doctor.firstName || doctor.name || ''} ${doctor.last_name || doctor.lastName || ''}`.toLowerCase()
         const username = (doctor.username || '').toLowerCase()
+        const specialization = (doctor.specialization || '').toLowerCase()
         const employeeId = (doctor.employee_id || '').toLowerCase()
         const doctorId = (doctor.employee_id || doctor.id || '').toString()
-        return fullName.includes(searchLower) || username.includes(searchLower) || employeeId.includes(searchLower) || doctorId.includes(searchLower)
+        return (
+          fullName.includes(searchLower) ||
+          username.includes(searchLower) ||
+          specialization.includes(searchLower) ||
+          employeeId.includes(searchLower) ||
+          doctorId.includes(searchLower)
+        )
       }).slice(0, 20)
     : []
 
@@ -122,9 +132,43 @@ const ReceptionistAppointments = () => {
           doctorsLength: Array.isArray(doctors) ? doctors.length : undefined
         })
 
-        setAppointments(allAppointments)
+        // Normalize appointments to a consistent shape (backend returns multiple shapes)
+        const normalizeAppointment = (a) => {
+          const appointment_date = a.appointment_date || a.appointmentDate || a.date || a.preferred_date || a.preferredDate || null
+          const start_time_raw = a.start_time || a.startTime || a.time || a.preferred_time || a.preferredTime || null
+          const end_time_raw = a.end_time || a.endTime || null
+
+          const normalized = {
+            ...a,
+            appointment_date,
+            start_time: start_time_raw,
+            end_time: end_time_raw,
+            visit_type: a.visit_type || a.visitType || a.type || a.visit || '',
+            room_number: a.room_number || a.roomNumber || a.room || '',
+            reason: a.reason || a.notes || a.reason || a.note || '',
+            // Keep doctor info consistent
+            doctor: a.doctor || (a.doctorName ? { id: a.doctorId || a.doctor_id, name: a.doctorName } : null)
+          }
+
+          return normalized
+        }
+
+        const normalizedAppointments = allAppointments.map(normalizeAppointment)
+
+        setAppointments(normalizedAppointments)
         setPatients(patients)
-        setDoctors(doctors)
+
+        // Normalize doctors - some endpoints may return { success: true, data: [...] }
+        const normalizedDoctors = Array.isArray(doctors)
+          ? doctors
+          : (doctors?.data || doctors?.doctors || [])
+
+        console.log('Normalized doctors:', {
+          length: normalizedDoctors.length,
+          sample: normalizedDoctors.slice(0, 5)
+        })
+
+        setDoctors(normalizedDoctors)
       } catch (error) {
         console.error('Error fetching data:', error)
         toast.error('Failed to load data')
@@ -140,6 +184,16 @@ const ReceptionistAppointments = () => {
       fetchData()
     }
   }, [user])
+
+  // Debug: log filtered options on search or doctors change
+  useEffect(() => {
+    try {
+      console.log('Doctor search:', doctorSearch, 'Doctors length:', doctors.length)
+      console.log('Filtered doctor options (first 10):', filteredDoctorOptions.slice(0, 10))
+    } catch (e) {
+      console.log('Filtering debug error:', e)
+    }
+  }, [doctorSearch, doctors])
 
   const filteredAppointments = appointments.filter(apt => {
     const matchesFilter = filter === 'all' || 
@@ -267,11 +321,15 @@ const ReceptionistAppointments = () => {
   const formatTime = (timeString) => {
     if (!timeString) return 'N/A'
     try {
+      // If already in 12-hour with AM/PM, return as-is
+      if (/\b(AM|PM)\b/i.test(timeString)) return timeString.trim()
+
       const [hours, minutes] = timeString.split(':')
       const hour = parseInt(hours)
+      if (isNaN(hour)) return timeString
       const ampm = hour >= 12 ? 'PM' : 'AM'
       const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
-      return `${displayHour}:${minutes} ${ampm}`
+      return `${displayHour}:${(minutes || '00').trim()} ${ampm}`
     } catch (error) {
       return timeString
     }
@@ -444,7 +502,11 @@ const ReceptionistAppointments = () => {
 
   // Close dropdowns when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e) => {
+      // If click is inside patient or doctor dropdown wrappers, do nothing
+      if (patientDropdownRef.current && patientDropdownRef.current.contains(e.target)) return
+      if (doctorDropdownRef.current && doctorDropdownRef.current.contains(e.target)) return
+
       setShowPatientDropdown(false)
       setShowDoctorDropdown(false)
     }
@@ -454,6 +516,42 @@ const ReceptionistAppointments = () => {
       document.removeEventListener('click', handleClickOutside)
     }
   }, [])
+
+  // Helper: fetch doctors from backend and normalize response
+  const fetchDoctors = async () => {
+    try {
+      const resp = await getAvailableDoctors()
+      const fetched = Array.isArray(resp) ? resp : (resp?.data || resp?.doctors || resp || [])
+      console.log('Fetched available doctors:', { length: (fetched || []).length, sample: (fetched || []).slice(0,5) })
+      setDoctors(Array.isArray(fetched) ? fetched : [])
+      return fetched
+    } catch (e) {
+      console.error('Error fetching doctors:', e)
+      toast.error('Failed to fetch doctors')
+      return []
+    }
+  }
+
+  // If user opens the add form and doctors are empty, fetch available doctors on demand
+  useEffect(() => {
+    const loadDoctorsOnOpen = async () => {
+      if (!showAddForm) return
+      if (Array.isArray(doctors) && doctors.length > 0) return
+      await fetchDoctors()
+    }
+
+    loadDoctorsOnOpen()
+  }, [showAddForm])
+
+  // Poll for new doctors while Add form is open (helps capture newly registered doctors)
+  useEffect(() => {
+    if (!showAddForm) return
+    const id = setInterval(() => {
+      fetchDoctors()
+    }, 15000) // every 15 seconds
+
+    return () => clearInterval(id)
+  }, [showAddForm])
 
   if (isLoading) {
     return (
@@ -486,7 +584,7 @@ const ReceptionistAppointments = () => {
           <form onSubmit={handleAddAppointment} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Patient Search */}
-              <div className="relative">
+              <div className="relative" ref={patientDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Patient <span className="text-red-500">*</span>
                 </label>
@@ -537,22 +635,32 @@ const ReceptionistAppointments = () => {
               </div>
 
               {/* Doctor Search */}
-              <div className="relative">
+              <div className="relative" ref={doctorDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Doctor <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={doctorSearch}
-                  onChange={(e) => {
-                    setDoctorSearch(e.target.value)
-                    setShowDoctorDropdown(true)
-                  }}
-                  onFocus={() => setShowDoctorDropdown(true)}
-                  className="input-field"
-                  placeholder="Search doctors by name or ID..."
-                  required
-                />
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={doctorSearch}
+                    onChange={(e) => {
+                      setDoctorSearch(e.target.value)
+                      setShowDoctorDropdown(true)
+                    }}
+                    onFocus={() => setShowDoctorDropdown(true)}
+                    className="input-field flex-1"
+                    placeholder="Search doctors by name or ID..."
+                    required
+                  />
+                  <button
+                    type="button"
+                    title="Refresh doctors"
+                    onClick={async (e) => { e.stopPropagation(); await fetchDoctors(); setShowDoctorDropdown(true) }}
+                    className="btn-ghost p-2 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                </div>
                 {showDoctorDropdown && (Array.isArray(doctors) && doctors.length > 0) && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {filteredDoctorOptions.map(doctor => (
@@ -580,6 +688,13 @@ const ReceptionistAppointments = () => {
                         No doctors found
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Debug info: show available doctors (first 10) and count */}
+                {showAddForm && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    Doctors count: {doctors.length} — sample: {doctors.slice(0, 10).map(d => (d?.name || d?.first_name || d?.username || `#${d?.id}`)).join(', ') || 'none'}
                   </div>
                 )}
               </div>
