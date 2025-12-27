@@ -3,6 +3,7 @@ import { FlaskConical, User, Calendar, Plus, Loader, Search, Filter, Eye, Edit, 
 import { useAuth } from '../../contexts/AuthContext';
 import { getLabRequests, createLabRequest, searchPatients, searchLabTechnicians, updateLabRequest } from '../../services/doctorService';
 import toast from 'react-hot-toast';
+import { getPatientName } from '../../utils/nameHelpers';
 
 const DoctorLabRequests = () => {
   const { user } = useAuth();
@@ -80,10 +81,10 @@ const DoctorLabRequests = () => {
 
   const filteredRequests = labRequests.filter(request => {
     const testType = request.testType || '';
-    const patientName = request.patient?.username || '';
+    const patientName = getPatientName(request);
     
     const matchesSearch = testType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         patientName.toLowerCase().includes(searchTerm.toLowerCase());
+                         (patientName || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -102,7 +103,9 @@ const DoctorLabRequests = () => {
         testType: newRequest.testType,
         urgency: newRequest.urgency,
         notes: newRequest.notes,
-        technicianId: newRequest.technicianId ? parseInt(newRequest.technicianId) : null
+        technicianId: newRequest.technicianId ? parseInt(newRequest.technicianId) : null,
+        // Ensure doctorId is sent so mock endpoints can persist who requested the test
+        doctorId: user?.id || null
       };
 
       const data = await createLabRequest(requestData);
@@ -113,6 +116,7 @@ const DoctorLabRequests = () => {
         id: data.id || Date.now(),
         patient: patients.find(p => p.id === parseInt(newRequest.patientId)),
         technician: labTechnicians.find(t => t.id === parseInt(newRequest.technicianId)),
+        doctor: data?.doctor || { id: user?.id, username: user?.username, name: user?.name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() },
         createdAt: new Date().toISOString(),
         status: 'pending'
       };
@@ -495,12 +499,7 @@ const DoctorLabRequests = () => {
                     <div className="space-y-2">
                       <div className="text-sm">
                         <span className="text-gray-600">Patient: </span>
-                        <span className="font-medium">
-                          {request.patient?.username || 
-                           (request.patient?.first_name && request.patient?.last_name 
-                             ? `${request.patient.first_name} ${request.patient.last_name}`
-                             : 'Unknown Patient')}
-                        </span>
+                        <span className="font-medium">{getPatientName(request)}</span>
                       </div>
                       <div className="text-sm">
                         <span className="text-gray-600">Date: </span>
@@ -598,10 +597,7 @@ const DoctorLabRequests = () => {
                       <div>
                         <span className="text-gray-600 font-medium">Patient: </span>
                         <span className="text-gray-800">
-                          {selectedRequest.patient?.username || 
-                           (selectedRequest.patient?.first_name && selectedRequest.patient?.last_name 
-                             ? `${selectedRequest.patient.first_name} ${selectedRequest.patient.last_name}`
-                             : 'Unknown Patient')}
+                          {getPatientName(selectedRequest)}
                         </span>
                       </div>
                       <div>

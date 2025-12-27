@@ -7,6 +7,7 @@ import {
   createBillingForAppointment 
 } from '../../services/receptionistService';
 import toast from 'react-hot-toast';
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers';
 
 const ReceptionistCompletedAppointments = () => {
   const { user } = useAuth();
@@ -236,19 +237,6 @@ const ReceptionistCompletedAppointments = () => {
     }
   };
 
-  const getPatientName = (appointment) => {
-    if (appointment.patient?.first_name && appointment.patient?.last_name) {
-      return `${appointment.patient.first_name} ${appointment.patient.last_name}`;
-    }
-    return appointment.patient?.username || 'Patient Name N/A';
-  };
-
-  const getDoctorName = (appointment) => {
-    if (appointment.doctor?.first_name && appointment.doctor?.last_name) {
-      return `Dr. ${appointment.doctor.first_name} ${appointment.doctor.last_name}`;
-    }
-    return appointment.doctor?.username ? `Dr. ${appointment.doctor.username}` : 'Doctor TBD';
-  };
 
   if (isLoading) {
     return (
@@ -324,7 +312,7 @@ const ReceptionistCompletedAppointments = () => {
                       </div>
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <User className="h-4 w-4" />
-                        <span>{getDoctorName(appointment)}</span>
+                        <span>{(() => { const dn = getDoctorName(appointment); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}</span>
                       </div>
                     </div>
 
@@ -388,7 +376,7 @@ const ReceptionistCompletedAppointments = () => {
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <div className="text-sm text-gray-600 space-y-1">
                 <p><strong>Patient:</strong> {getPatientName(selectedAppointment)}</p>
-                <p><strong>Doctor:</strong> {getDoctorName(selectedAppointment)}</p>
+                <p><strong>Doctor:</strong> {(() => { const dn = getDoctorName(selectedAppointment); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}</p>
                 <p><strong>Date:</strong> {new Date(selectedAppointment.appointment_date).toLocaleDateString()}</p>
                 <p><strong>Time:</strong> {formatTime(selectedAppointment.start_time)}</p>
                 <p><strong>Visit Type:</strong> {selectedAppointment.visit_type?.replace('_', ' ') || 'Consultation'}</p>

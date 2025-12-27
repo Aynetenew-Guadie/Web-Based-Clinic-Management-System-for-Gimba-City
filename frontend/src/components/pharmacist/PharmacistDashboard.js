@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getPrescriptions, dispensePrescription, getPatient, updatePatient, listDrugs, addDrug } from '../../services/pharmacistService';
 import toast from 'react-hot-toast';
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers';
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../layout/Layout';
@@ -60,8 +61,8 @@ const PharmacistHome = ({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">{p.medication || 'Medication'}</h3>
-                  <div className="text-sm text-gray-600">Patient: {p.patient?.first_name || p.patient?.username || 'Unknown'}</div>
-                  <div className="text-sm text-gray-500">Prescribed by: {p.doctor?.first_name || p.doctor?.username || 'Unknown'}</div>
+                  <div className="text-sm text-gray-600">Patient: {getPatientName(p)}</div>
+                  <div className="text-sm text-gray-500">Prescribed by: {getDoctorName(p)}</div>
                   {p.instructions && <div className="text-sm text-gray-500">Notes: {p.instructions}</div>}
                 </div>
                 <div className="flex items-center space-x-2">

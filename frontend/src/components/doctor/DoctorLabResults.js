@@ -3,6 +3,7 @@ import { FileText, Eye, Download, Search, Filter, Calendar, User, FlaskConical, 
 import { useAuth } from '../../contexts/AuthContext';
 import { getLabResults, releaseLabResultToPatient, shareLabResultToPatient } from '../../services/doctorService';
 import toast from 'react-hot-toast';
+import { getPatientName, getTechnicianName } from '../../utils/nameHelpers';
 
 const DoctorLabResults = () => {
   const { user } = useAuth();
@@ -42,9 +43,34 @@ const DoctorLabResults = () => {
     }
   }, [user]);
 
+  // Helpers to extract patient/technician names from varying backend shapes
+  const getPatientName = (result) => {
+    const patient = result.labRequest?.patient || result.patient || result.patientId || result.patientInfo || null;
+    if (!patient) return 'Unknown';
+    if (typeof patient === 'string') return patient;
+    if (patient.name) return patient.name;
+    if (patient.username) return patient.username;
+    if (patient.full_name) return patient.full_name;
+    if (patient.first_name || patient.last_name) return `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+    if (patient.id) return String(patient.id);
+    return String(patient);
+  };
+
+  const getTechnicianName = (result) => {
+    const tech = result.technician || result.technicianId || result.labRequest?.technician || null;
+    if (!tech) return 'Unknown';
+    if (typeof tech === 'string') return tech;
+    if (typeof tech === 'number') return String(tech);
+    if (tech.name) return tech.name;
+    if (tech.username) return tech.username;
+    if (tech.first_name || tech.last_name) return `${tech.first_name || ''} ${tech.last_name || ''}`.trim();
+    if (tech.id) return String(tech.id);
+    return String(tech);
+  };
+
   const filteredResults = labResults.filter(result => {
     const testType = result.labRequest?.testType || '';
-    const patientName = result.labRequest?.patient?.username || '';
+    const patientName = (getPatientName(result) || '').toString();
     const resultDetails = result.resultDetails || '';
     
     const matchesSearch = 
@@ -78,9 +104,9 @@ Lab Result Report
 =================
 
 Test Type: ${result.labRequest?.testType || 'N/A'}
-Patient: ${result.labRequest?.patient?.username || 'N/A'}
+Patient: ${getPatientName(result)}
 Date: ${result.date ? new Date(result.date).toLocaleDateString() : 'N/A'}
-Technician: ${result.technician?.username || 'N/A'}
+Technician: ${getTechnicianName(result)}
 Status: ${result.status || 'pending_review'}
 
 Results:
@@ -262,7 +288,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
                       <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
                           <User className="h-4 w-4" />
-                          <span>Patient: {result.labRequest?.patient?.username || 'Unknown'}</span>
+                          <span>Patient: {getPatientName(result)}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4" />
@@ -272,7 +298,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
                         </div>
                       </div>
                       <div className="text-gray-500">
-                        <span className="font-medium">Technician:</span> {result.technician?.username || 'Unknown'}
+                        <span className="font-medium">Technician:</span> {getTechnicianName(result)}
                       </div>
                     </div>
                     
@@ -383,7 +409,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
                   Lab Result Details
                 </h3>
                 <p className="text-gray-600 mt-1">
-                  {selectedResult.labRequest?.testType} - {selectedResult.labRequest?.patient?.username}
+                  {selectedResult.labRequest?.testType} - {getPatientName(selectedResult)}
                 </p>
               </div>
               <button 
@@ -402,7 +428,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
                     <h4 className="font-medium text-gray-900 mb-2">Test Information</h4>
                     <div className="space-y-2 text-sm">
                       <div><strong>Test Type:</strong> {selectedResult.labRequest?.testType || 'N/A'}</div>
-                      <div><strong>Patient:</strong> {selectedResult.labRequest?.patient?.username || 'Unknown'}</div>
+                      <div><strong>Patient:</strong> {getPatientName(selectedResult)}</div>
                       <div><strong>Urgency:</strong> {selectedResult.labRequest?.urgency || 'N/A'}</div>
                       <div><strong>Status:</strong> {getStatusText(selectedResult)}</div>
                     </div>
@@ -415,7 +441,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
                     <div className="space-y-2 text-sm">
                       <div><strong>Requested:</strong> {formatDate(selectedResult.labRequest?.createdAt)}</div>
                       <div><strong>Completed:</strong> {formatDate(selectedResult.date)}</div>
-                      <div><strong>Technician:</strong> {selectedResult.technician?.username || 'Unknown'}</div>
+                      <div><strong>Technician:</strong> {getTechnicianName(selectedResult)}</div>
                     </div>
                   </div>
                 </div>
@@ -493,7 +519,7 @@ ${result.notes ? `Notes: ${result.notes}` : ''}
             <div className="mb-4">
               <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
                 <p><strong>Test:</strong> {selectedResult.labRequest?.testType || 'N/A'}</p>
-                <p><strong>Patient:</strong> {selectedResult.labRequest?.patient?.username || 'Unknown'}</p>
+                <p><strong>Patient:</strong> {getPatientName(selectedResult)}</p>
                 <p><strong>Date:</strong> {formatDate(selectedResult.date)}</p>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { FlaskConical, User, Play, Check, Loader, Search, Filter, AlertCircle } 
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { getPendingTests, acceptTestRequest, enterTestResult } from '../../services/labService'
+import api from '../../services/apiService'
 import toast from 'react-hot-toast'
 
 const LabPendingTests = () => {
@@ -26,7 +27,37 @@ const LabPendingTests = () => {
       try {
         setIsLoading(true)
         const data = await getPendingTests()
-        setTests(data || [])
+
+        // fetch and attach missing doctor objects if backend didn't include them
+        const enrichMissingDoctors = async (tests) => {
+          if (!Array.isArray(tests) || tests.length === 0) return tests || [];
+          const missing = new Set();
+          tests.forEach(t => {
+            const existing = t.labRequest?.doctor || t.doctor;
+            const did = t.labRequest?.doctorId || t.doctorId || t.requestedById || t.requested_by || t.requestedBy;
+            if (!existing && (did || did === 0)) missing.add(String(did));
+          });
+          if (missing.size === 0) return tests;
+          const ids = Array.from(missing);
+          const fetched = await Promise.all(ids.map(id => api.get(`/admin/users/${id}`).then(r => r?.user || r?.data?.user || r?.data || r).catch(() => null)));
+          const map = {};
+          ids.forEach((id, i) => map[id] = fetched[i]);
+          return tests.map(t => {
+            const did = String(t.labRequest?.doctorId || t.doctorId || t.requestedById || t.requested_by || t.requestedBy || '');
+            const doc = (did && map[did]) || t.labRequest?.doctor || t.doctor || null;
+            return {
+              ...t,
+              labRequest: {
+                ...(t.labRequest || {}),
+                doctor: doc || (t.labRequest && t.labRequest.doctor) || null
+              },
+              doctor: doc || t.doctor
+            };
+          });
+        };
+
+        const enriched = await enrichMissingDoctors(Array.isArray(data) ? data : []);
+        setTests(enriched || [])
       } catch (error) {
         console.error('Error fetching pending tests:', error)
         toast.error('Failed to load pending tests')
@@ -58,16 +89,31 @@ const LabPendingTests = () => {
 
   const getDoctorName = (test) => {
     const doctor = test.labRequest?.doctor || test.doctor || test.requestedBy || test.requestedById || null
-    if (!doctor) return 'Unknown Doctor'
-    if (typeof doctor === 'string') return doctor
-    if (doctor.username) return doctor.username
-    if (doctor.full_name) return doctor.full_name
-    if (doctor.fullName) return doctor.fullName
-    if (doctor.name) return doctor.name
-    if (doctor.first_name || doctor.last_name) return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim()
-    if (doctor.firstName || doctor.lastName) return `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim()
-    if (doctor.id) return doctor.id
-    return String(doctor)
+    if (doctor) {
+      if (typeof doctor === 'string') return doctor
+      if (doctor.username) return doctor.username
+      if (doctor.full_name) return doctor.full_name
+      if (doctor.fullName) return doctor.fullName
+      if (doctor.name) return doctor.name
+      if (doctor.first_name || doctor.last_name) return `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim()
+      if (doctor.firstName || doctor.lastName) return `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim()
+      if (doctor.id) return doctor.id
+      return String(doctor)
+    }
+
+    // Fallbacks: maybe the request carries a requestedBy name or was patient-initiated
+    const requestedByName = test.requestedByName || test.requested_by_name || test.requested_by || test.requestedBy || null
+    if (requestedByName) return requestedByName
+
+    const patient = test.labRequest?.patient || test.patient || null
+    if (patient) {
+      if (typeof patient === 'string') return `Patient: ${patient}`
+      if (patient.username) return `Patient: ${patient.username}`
+      if (patient.name) return `Patient: ${patient.name}`
+      if (patient.first_name || patient.last_name) return `Patient: ${patient.first_name || ''} ${patient.last_name || ''}`.trim()
+    }
+
+    return 'Not specified'
   }
 
   const filteredTests = tests.filter(test => {
@@ -245,7 +291,7 @@ const LabPendingTests = () => {
                       {getUrgencyIcon(test.urgency)}
                     </div>
                     <p className="text-sm text-gray-600">
-                      {getPatientName(test)}
+                      <strong>Patient:</strong> {getPatientName(test)}
                     </p>
                     {test.notes && (
                       <p className="text-xs text-gray-500 mt-1">{test.notes}</p>
@@ -275,8 +321,9 @@ const LabPendingTests = () => {
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
                   <div>
-                    <span className="font-medium">Requested by: </span>
-                    <span>{getDoctorName(test)}</span>
+                    <span className="font-medium">Patient: </span>
+                    <span>{getPatientName(test)}</span>
+                    <div className="text-xs text-gray-500 mt-1"><span className="font-medium">Requested by: </span><span>{getDoctorName(test)}</span></div>
                   </div>
                   <div>
                     <span className="font-medium">Date: </span>

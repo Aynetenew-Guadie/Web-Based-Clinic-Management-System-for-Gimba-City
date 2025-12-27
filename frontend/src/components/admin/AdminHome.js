@@ -28,18 +28,27 @@ const AdminHome = () => {
           getBillingStats()
         ]);
 
+        // If main endpoints returned empty objects, try the admin overview endpoint as a fallback
+        const isEmptyStats = Object.keys(userStats).length === 0 && Object.keys(billingStats).length === 0;
+        let overview = {};
+        if (isEmptyStats) {
+          // dynamic import to avoid circular issues
+          const { getAdminOverview } = await import('../../services/adminService');
+          overview = await getAdminOverview();
+        }
+
         setStats({
-          users: userStats.total || 0,
-          staff: userStats.staff || 0,
-          revenueMonth: billingStats.monthlyRevenue || 0,
-          activePatients: userStats.activePatients || 0
+          users: userStats.total || overview.totalUsers || 0,
+          staff: userStats.staff || overview.staffMembers || 0,
+          revenueMonth: billingStats.monthlyRevenue || overview.monthlyRevenue || 0,
+          activePatients: userStats.activePatients || overview.activePatients || 0
         });
 
         setRecentActivity({
           users: [
             '+ New doctor added',
-            `+ ${userStats.activePatients || 0} patients registered`,
-            `~ ${userStats.staff || 0} staff members active`
+            `+ ${userStats.activePatients || overview.activePatients || 0} patients registered`,
+            `~ ${userStats.staff || overview.staffMembers || 0} staff members active`
           ],
           billing: [
             `$ ${(billingStats.dailyRevenue || 0).toLocaleString()} collected today`,

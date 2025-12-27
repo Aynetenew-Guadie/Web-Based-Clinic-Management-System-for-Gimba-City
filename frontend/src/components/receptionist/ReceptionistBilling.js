@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Download, CreditCard, Calendar, User, DollarSign, Loader } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAllBilling } from '../../services/receptionistService';
+import { getPatientName } from '../../utils/nameHelpers';
 import toast from 'react-hot-toast';
 
 const ReceptionistBilling = () => {
@@ -56,8 +57,9 @@ const ReceptionistBilling = () => {
 
   // FIXED: Safe filtering
   const filteredRecords = billingRecords.filter(record => {
-    const matchesSearch = record.patientName?.toLowerCase().includes(search.toLowerCase()) ||
-                         record.service?.toLowerCase().includes(search.toLowerCase());
+    const patientName = (getPatientName(record) || '').toLowerCase();
+    const matchesSearch = patientName.includes(search.toLowerCase()) ||
+                         (record.service || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -197,7 +199,7 @@ const ReceptionistBilling = () => {
                           <User className="h-5 w-5 text-primary-600" />
                         </div>
                         <div>
-                          <h3 className="font-medium text-gray-900">{record.patientName}</h3>
+                          <h3 className="font-medium text-gray-900">{getPatientName(record)}</h3>
                           <p className="text-sm text-gray-600">{record.service}</p>
                           <p className="text-xs text-gray-500">Due: {record.dueDate}</p>
                         </div>
@@ -241,7 +243,7 @@ const ReceptionistBilling = () => {
                 recentTransactions.map(transaction => (
                   <div key={transaction.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                     <div>
-                      <p className="font-medium text-gray-900">{transaction.patientName}</p>
+                      <p className="font-medium text-gray-900">{getPatientName(transaction)}</p>
                       <p className="text-sm text-gray-600">{transaction.type} • {transaction.method}</p>
                       <p className="text-xs text-gray-500">{transaction.date}</p>
                     </div>

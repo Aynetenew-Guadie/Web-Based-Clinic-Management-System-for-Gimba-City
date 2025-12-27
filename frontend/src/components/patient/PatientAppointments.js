@@ -3,6 +3,7 @@ import { Calendar, Clock, User, MapPin, Phone, Filter, Loader, X, CheckCircle, A
 import { getPatientAppointments, cancelAppointment, rescheduleAppointment } from '../../services/patientService';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { getDoctorName } from '../../utils/nameHelpers';
 
 const PatientAppointments = () => {
   const { user } = useAuth();
@@ -259,7 +260,7 @@ const PatientAppointments = () => {
                         <div className="min-w-0">
                           <h3 className="text-lg font-semibold text-gray-900 truncate">
                             {(() => {
-                              const dn = appointment.doctor?.username || appointment.doctorName || appointment.doctor_name || 'Unknown Doctor';
+                              const dn = getDoctorName(appointment);
                               return (/^Dr/i.test(dn) ? dn : `Dr. ${dn}`);
                             })()}
                           </h3>
@@ -433,7 +434,7 @@ const PatientAppointments = () => {
                     <p>
                       <strong>Doctor:</strong>{' '}
                       {(() => {
-                        const dn = selectedAppointment.doctor?.username || selectedAppointment.doctorName || selectedAppointment.doctor_name || 'Unknown Doctor';
+                        const dn = getDoctorName(selectedAppointment);
                         return (/^Dr/i.test(dn) ? dn : `Dr. ${dn}`);
                       })()}
                     </p>

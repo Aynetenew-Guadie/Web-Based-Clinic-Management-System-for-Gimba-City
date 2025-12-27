@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User, MapPin, Filter, Search, Loader, DollarSign, CheckCircle, RefreshCw } from 'lucide-react';
 import { getTodaysAppointments, completeAppointment, getPatientRecords, updateAppointmentStatus, normalizePatient } from '../../services/doctorService';
+import { getPatientName as getPatientNameHelper } from '../../utils/nameHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -252,25 +253,7 @@ const DoctorAppointments = () => {
     }
   };
 
-  const getPatientName = (appointment) => {
-    // Try multiple common fields for name/username/id
-    const patient = appointment.patient || {};
-    const name = patient.username || patient.name || appointment.patientName || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
-    const username = patient.username || appointment.username || null;
-    const rawId = patient.patientId || patient.id || appointment.patientId || appointment.patient_id || null;
-
-    // Format id to PATxxxxxx when numeric
-    let formattedId = null;
-    if (rawId !== null && rawId !== undefined && rawId !== '') {
-      const parsed = parseInt(rawId);
-      formattedId = !isNaN(parsed) ? `PAT${String(parsed).padStart(6, '0')}` : String(rawId);
-    }
-
-    if (name) return name;
-    if (username) return username.startsWith('@') ? username : `@${username}`;
-    if (formattedId) return formattedId;
-    return 'Patient Name N/A';
-  };
+  const getPatientName = (appointment) => getPatientNameHelper(appointment);
 
   if (isLoading) {
     return (

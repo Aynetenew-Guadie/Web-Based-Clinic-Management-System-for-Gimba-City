@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/apiService';
 import { searchPatients, createMedicalNote } from '../../services/doctorService';
 import toast from 'react-hot-toast';
+import { getPatientName } from '../../utils/nameHelpers';
 
 const DoctorMedicalNotes = () => {
   const { user } = useAuth();
@@ -78,12 +79,9 @@ const DoctorMedicalNotes = () => {
   }, [user]);
 
   const filteredNotes = notes.filter(note => {
-    const patientName = note.patient?.username || 
-                       (note.patient?.first_name && note.patient?.last_name 
-                         ? `${note.patient.first_name} ${note.patient.last_name}`
-                         : 'Unknown Patient');
+    const patientName = getPatientName(note);
     
-    const matchesSearch = patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = (patientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          note.summary?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          note.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -411,10 +409,7 @@ const DoctorMedicalNotes = () => {
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {note.patient?.username || 
-                       (note.patient?.first_name && note.patient?.last_name 
-                         ? `${note.patient.first_name} ${note.patient.last_name}`
-                         : 'Unknown Patient')}
+                      {getPatientName(note)}
                     </h3>
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getNoteTypeColor(note.noteType)}`}>
                       {getNoteTypeText(note.noteType)}
@@ -496,12 +491,7 @@ const DoctorMedicalNotes = () => {
                     <div className="space-y-2">
                       <div>
                         <span className="text-gray-600 font-medium">Patient: </span>
-                        <span className="text-gray-800">
-                          {selectedNote.patient?.username || 
-                           (selectedNote.patient?.first_name && selectedNote.patient?.last_name 
-                             ? `${selectedNote.patient.first_name} ${selectedNote.patient.last_name}`
-                             : 'Unknown Patient')}
-                        </span>
+                        <span className="text-gray-800">{getPatientName(selectedNote)}</span>
                       </div>
                       {selectedNote.patient?.id && (
                         <div>
@@ -591,10 +581,7 @@ const DoctorMedicalNotes = () => {
                   </label>
                   <input
                     type="text"
-                    value={editingNote.patient?.username || 
-                           (editingNote.patient?.first_name && editingNote.patient?.last_name 
-                             ? `${editingNote.patient.first_name} ${editingNote.patient.last_name}`
-                             : 'Unknown Patient')}
+                    value={getPatientName(editingNote)}
                     className="input-field bg-gray-100"
                     disabled
                   />

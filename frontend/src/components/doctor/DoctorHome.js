@@ -7,6 +7,7 @@ import {
   getPrescriptions,
   getDoctorStats 
 } from '../../services/doctorService';
+import { getPatientName as getPatientNameHelper } from '../../utils/nameHelpers';
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast';
 
@@ -148,14 +149,7 @@ const DoctorHome = () => {
     return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
   };
 
-  const getPatientName = (appointment) => {
-    // Handle different patient name structures
-    if (appointment.patientName) return appointment.patientName;
-    if (appointment.patient?.name) return appointment.patient.name;
-    if (appointment.patient?.username) return appointment.patient.username;
-    if (appointment.patientName) return appointment.patientName;
-    return 'Patient Name N/A';
-  };
+  const getPatientName = (appointment) => getPatientNameHelper(appointment);
 
   const getVisitType = (appointment) => {
     if (appointment.visit_type) return appointment.visit_type.replace(/_/g, ' ');

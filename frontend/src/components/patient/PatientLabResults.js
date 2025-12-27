@@ -3,6 +3,7 @@ import { FlaskConical, Calendar, Download, FileText, Loader, Search, Filter, Use
 import { useAuth } from '../../contexts/AuthContext';
 import { getLabResults } from '../../services/patientService';
 import { toast } from 'react-hot-toast';
+import { getDoctorName, getTechnicianName } from '../../utils/nameHelpers';
 
 const PatientLabResults = () => {
   const { user } = useAuth();
@@ -34,12 +35,11 @@ const PatientLabResults = () => {
   }, [user]);
 
   const filteredResults = labResults.filter(result => {
-    const matchesSearch = result.labRequest?.testType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.testType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.test?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.labRequest?.doctor?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.doctor?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.notes?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = (result.labRequest?.testType || result.testType || result.test || '').toLowerCase().includes(term) ||
+                         getDoctorName(result).toLowerCase().includes(term) ||
+                         getTechnicianName(result).toLowerCase().includes(term) ||
+                         (result.notes || '').toLowerCase().includes(term);
     const matchesStatus = filterStatus === 'all' || result.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -102,6 +102,8 @@ const PatientLabResults = () => {
     }
   };
 
+  // Using shared helpers from utils/nameHelpers for doctor/technician names
+
   const downloadReport = (result) => {
     // Create a formatted text file with the lab result details
     const content = `
@@ -118,14 +120,14 @@ Report Date: ${new Date().toLocaleDateString()}
 TEST INFORMATION:
 -----------------
 Test Type: ${result.labRequest?.testType || result.testType || result.test || 'Laboratory Test'}
-Ordering Physician: ${result.labRequest?.doctor?.username || result.doctor?.username || result.doctor || 'Unknown Doctor'}
+Ordering Physician: ${getDoctorName(result)}
 ${result.doctor?.employee_id ? `Physician ID: ${result.doctor.employee_id}\n` : ''}
 Status: ${getStatusText(result)}
 ${result.urgency ? `Priority: ${result.urgency}\n` : ''}
 
 LABORATORY DETAILS:
 -------------------
-${result.technician ? `Lab Technician: ${result.technician.username || result.technician.first_name || 'Unknown'}\n` : ''}
+${getTechnicianName(result) ? `Lab Technician: ${getTechnicianName(result)}\n` : ''}
 ${result.availableDate ? `Available Date: ${new Date(result.availableDate).toLocaleDateString()}\n` : ''}
 
 TEST RESULTS:
@@ -299,7 +301,7 @@ Generated on: ${new Date().toLocaleString()}
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <User className="h-4 w-4 flex-shrink-0" />
                         <span>
-                          {result.labRequest?.doctor?.username || result.doctor?.username || result.doctor || 'Unknown Doctor'}
+                          {getDoctorName(result)}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -324,10 +326,10 @@ Generated on: ${new Date().toLocaleString()}
                           </span>
                         </div>
                       )}
-                      {result.technician && (
+                      {getTechnicianName(result) && getTechnicianName(result) !== 'Unknown' && (
                         <div className="text-sm text-gray-600">
                           <span className="font-medium">Technician: </span>
-                          <span>{result.technician.username || result.technician.first_name || 'Unknown'}</span>
+                          <span>{getTechnicianName(result)}</span>
                         </div>
                       )}
                     </div>

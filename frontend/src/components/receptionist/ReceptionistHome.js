@@ -10,6 +10,7 @@ import {
   getAvailableDoctors
 } from '../../services/receptionistService';
 import toast from 'react-hot-toast';
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers';
 
 const ReceptionistHome = () => {
   const { user } = useAuth();
@@ -85,13 +86,15 @@ const ReceptionistHome = () => {
           (appointmentRequests.value?.data || appointmentRequests.value || []) : [];
         
         const allPatients = patients.status === 'fulfilled' ? 
-          (patients.value?.data || patients.value || []) : [];
+          (patients.value?.data || patients.value?.patients || patients.value || []) : [];
         
         const scheduled = scheduledAppointments.status === 'fulfilled' ? 
           (scheduledAppointments.value?.data || scheduledAppointments.value || []) : [];
         
         const allDoctors = doctors.status === 'fulfilled' ? 
-          (doctors.value?.data || doctors.value || []) : [];
+          (doctors.value?.data || doctors.value?.doctors || doctors.value || []) : [];
+
+        console.log('ReceptionistHome fetched:', { queue: queue.length, patients: Array.isArray(allPatients) ? allPatients.length : typeof allPatients, doctors: Array.isArray(allDoctors) ? allDoctors.length : typeof allDoctors })
 
         const today = new Date();
         const todayString = today.toDateString();
@@ -157,24 +160,24 @@ const ReceptionistHome = () => {
         const activity = [
           ...queue.slice(0, 3).map(p => ({
             type: 'queue',
-            message: `${p.patient?.first_name || p.patient?.username || 'Patient'} ${getQueueAction(p.status)}`,
+            message: `${getPatientName(p.patient)} ${getQueueAction(p.status)}`,
             time: p.check_in_time || p.updated_at || p.createdAt,
             status: p.status,
-            patientName: p.patient?.first_name || p.patient?.username || 'Patient'
+            patientName: getPatientName(p.patient)
           })),
           ...requests.slice(0, 2).map(r => ({
             type: 'appointment',
-            message: `New appointment request from ${r.patient?.first_name || r.patient?.username || 'Patient'}`,
+            message: `New appointment request from ${getPatientName(r.patient)}`,
             time: r.created_at || r.createdAt,
             status: 'pending',
-            patientName: r.patient?.first_name || r.patient?.username || 'Patient'
+            patientName: getPatientName(r.patient)
           })),
           ...scheduled.slice(0, 2).map(apt => ({
             type: 'scheduled',
-            message: `Appointment scheduled for ${apt.patient?.first_name || apt.patient?.username || 'Patient'}`,
+            message: `Appointment scheduled for ${getPatientName(apt.patient)}`,
             time: apt.created_at || apt.createdAt,
             status: 'scheduled',
-            patientName: apt.patient?.first_name || apt.patient?.username || 'Patient'
+            patientName: getPatientName(apt.patient)
           }))
         ]
         .sort((a, b) => new Date(b.time) - new Date(a.time))
@@ -412,10 +415,10 @@ const ReceptionistHome = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 truncate">
-                        {patient.patient?.first_name || patient.patient?.username || patient.name || 'Patient Name N/A'}
+                        {getPatientName(patient)}
                       </p>
                       <p className="text-sm text-gray-600 truncate">
-                        {patient.doctor?.first_name || patient.doctor?.username || patient.doctor || 'Doctor TBD'}
+                        {(() => { const dn = getDoctorName(patient); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                       </p>
                     </div>
                   </div>
@@ -536,10 +539,10 @@ const ReceptionistHome = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">
-                      {appointment.patient?.first_name || appointment.patient?.username || 'Patient'}
+                      {getPatientName(appointment)}
                     </p>
                     <p className="text-sm text-gray-600 truncate">
-                      Dr. {appointment.doctor?.first_name || appointment.doctor?.username || 'Doctor'}
+                      {(() => { const dn = getDoctorName(appointment); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                     </p>
                   </div>
                 </div>

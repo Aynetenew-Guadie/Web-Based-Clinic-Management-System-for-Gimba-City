@@ -310,7 +310,7 @@ const LabTestResults = () => {
                     </div>
                     <div>
                       <span className="font-medium">Technician: </span>
-                      <span>{result.technician?.username || result.technician || 'Unknown'}</span>
+                      <span>{result.technician?.name || result.technician?.username || result.technician || 'Unknown'}</span>
                     </div>
                   </div>
                 </div>

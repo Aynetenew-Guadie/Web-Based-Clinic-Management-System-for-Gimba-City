@@ -3,6 +3,7 @@ import { FlaskConical, ClipboardCheck, Clock, FileText, Loader } from 'lucide-re
 import { useAuth } from '../../contexts/AuthContext'
 import { getPendingTests, getInProgressTests, getCompletedTests } from '../../services/labService'
 import toast from 'react-hot-toast'
+import { getPatientName } from '../../utils/nameHelpers'
 
 const LabHome = () => {
   const { user } = useAuth()
@@ -143,9 +144,7 @@ const LabHome = () => {
                     <p className="font-medium text-gray-900">
                       {test.testType || test.labRequest?.testType || 'Lab Test'}
                     </p>
-                    <p className="text-sm text-gray-600">
-                      {test.patient?.username || test.labRequest?.patient?.username || 'Patient N/A'}
-                    </p>
+                    <p className="text-sm text-gray-600">{getPatientName(test)}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(test.status)}`}>

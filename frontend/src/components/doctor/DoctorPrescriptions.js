@@ -3,6 +3,7 @@ import { Pill, User, Calendar, Plus, Loader, Search, Filter, Eye, FileText, Edit
 import { useAuth } from '../../contexts/AuthContext';
 import { createPrescription, getPrescriptions, searchPatients, updatePrescription } from '../../services/doctorService';
 import toast from 'react-hot-toast';
+import { getPatientName } from '../../utils/nameHelpers';
 
 const DoctorPrescriptions = () => {
   const { user } = useAuth();
@@ -64,13 +65,10 @@ const DoctorPrescriptions = () => {
   }, [user]);
 
   const filteredPrescriptions = prescriptions.filter(prescription => {
-    const patientName = prescription.patient?.username || 
-                       (prescription.patient?.first_name && prescription.patient?.last_name 
-                         ? `${prescription.patient.first_name} ${prescription.patient.last_name}`
-                         : 'Unknown Patient');
+    const patientName = getPatientName(prescription);
     
     const matchesSearch = prescription.medication?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         patientName.toLowerCase().includes(searchTerm.toLowerCase());
+                         (patientName || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || prescription.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -549,12 +547,7 @@ const DoctorPrescriptions = () => {
                     <div className="space-y-2">
                       <div className="text-sm">
                         <span className="text-gray-600">Patient: </span>
-                        <span className="font-medium">
-                          {prescription.patient?.username || 
-                           (prescription.patient?.first_name && prescription.patient?.last_name 
-                             ? `${prescription.patient.first_name} ${prescription.patient.last_name}`
-                             : 'Unknown Patient')}
-                        </span>
+                        <span className="font-medium">{getPatientName(prescription)}</span>
                       </div>
                       <div className="text-sm">
                         <span className="text-gray-600">Dosage: </span>

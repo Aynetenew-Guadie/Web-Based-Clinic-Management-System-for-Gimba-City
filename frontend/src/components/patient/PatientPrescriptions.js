@@ -3,6 +3,7 @@ import { Pill, Calendar, User, Clock, Loader, Search, Filter, AlertCircle } from
 import { useAuth } from '../../contexts/AuthContext';
 import { getPrescriptions, getPrescriptionDetails } from '../../services/patientService';
 import { toast } from 'react-hot-toast';
+import { getDoctorName } from '../../utils/nameHelpers';
 
 const PatientPrescriptions = () => {
   const { user } = useAuth();
@@ -51,11 +52,11 @@ const PatientPrescriptions = () => {
   };
 
   const filteredPrescriptions = prescriptions.filter(prescription => {
-    const matchesSearch = prescription.medication?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         prescription.doctor?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         prescription.doctor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         prescription.instructions?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         prescription.notes?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = (prescription.medication || '').toLowerCase().includes(term) ||
+                         getDoctorName(prescription).toLowerCase().includes(term) ||
+                         (prescription.instructions || '').toLowerCase().includes(term) ||
+                         (prescription.notes || '').toLowerCase().includes(term);
     const matchesStatus = filterStatus === 'all' || prescription.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -223,7 +224,7 @@ const PatientPrescriptions = () => {
                       <div className="space-y-2">
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <User className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{prescription.doctor?.username || prescription.doctor?.name || prescription.doctor || 'Unknown Doctor'}</span>
+                          <span className="truncate">{getDoctorName(prescription)}</span>
                         </div>
                         <div className="mt-2">
                           <button onClick={() => openPrescription(prescription.id)} className="btn-secondary text-sm px-3 py-2">View Details</button>
@@ -326,7 +327,7 @@ const PatientPrescriptions = () => {
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <User className="h-4 w-4 flex-shrink-0" />
                           <span className="truncate">
-                            {prescription.doctor?.username || prescription.doctor?.name || prescription.doctor || 'Unknown Doctor'}
+                            {getDoctorName(prescription)}
                           </span>
                         </div>
                         <div className="mt-2">

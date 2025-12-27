@@ -3,6 +3,7 @@ import { Users, User, Clock, Loader, Search, CheckCircle, AlertCircle, Phone, Us
 import { useAuth } from '../../contexts/AuthContext'
 import { getPatientQueue, getPatients, getAvailableDoctors } from '../../services/receptionistService'
 import toast from 'react-hot-toast'
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers'
 
 const ReceptionistQueue = () => {
   const { user } = useAuth()
@@ -50,14 +51,14 @@ const ReceptionistQueue = () => {
           : []
         
         const patients = patientsData.status === 'fulfilled' 
-          ? (patientsData.value?.data || patientsData.value || []) 
+          ? (patientsData.value?.data || patientsData.value?.patients || patientsData.value || []) 
           : []
         
         const doctors = doctorsData.status === 'fulfilled' 
-          ? (doctorsData.value?.data || doctorsData.value || []) 
+          ? (doctorsData.value?.data || doctorsData.value?.doctors || doctorsData.value || []) 
           : []
 
-        console.log('Fetched data:', { queue: queue.length, patients: patients.length, doctors: doctors.length })
+        console.log('Fetched data:', { queue: queue.length, patientsType: Array.isArray(patients) ? 'array' : typeof patients, patientsLength: Array.isArray(patients) ? patients.length : undefined, doctorsType: Array.isArray(doctors) ? 'array' : typeof doctors, doctorsLength: Array.isArray(doctors) ? doctors.length : undefined })
 
         setQueue(queue)
         setPatients(patients)
@@ -126,22 +127,13 @@ const ReceptionistQueue = () => {
     const searchLower = (searchTerm || '').toLowerCase()
 
     return queue.filter(item => {
-      // Safely coerce fields to strings before lowercasing to avoid calling
-      // methods on undefined and causing runtime errors.
-      const patientUsername = (item.patient?.username || '').toLowerCase()
-      const patientFirst = (item.patient?.first_name || '').toLowerCase()
-      const patientLast = (item.patient?.last_name || '').toLowerCase()
-      const doctorUsername = (item.doctor?.username || '').toLowerCase()
-      const doctorFirst = (item.doctor?.first_name || '').toLowerCase()
-      const doctorLast = (item.doctor?.last_name || '').toLowerCase()
+      // Use centralized helpers to form searchable labels
+      const patientLabel = (getPatientName(item) || '').toLowerCase()
+      const doctorLabel = (getDoctorName(item) || '').replace(/^dr\.?\s*/i, '').toLowerCase()
 
       const matchesSearch = searchLower === '' || 
-        patientUsername.includes(searchLower) ||
-        patientFirst.includes(searchLower) ||
-        patientLast.includes(searchLower) ||
-        doctorUsername.includes(searchLower) ||
-        doctorFirst.includes(searchLower) ||
-        doctorLast.includes(searchLower)
+        patientLabel.includes(searchLower) ||
+        doctorLabel.includes(searchLower)
 
       const matchesStatus = filterStatus === 'all' || 
         (filterStatus === 'waiting' && (item.status === 'waiting' || item.status === 'checked_in')) ||
@@ -324,21 +316,6 @@ const ReceptionistQueue = () => {
     }
   }
 
-  const getPatientName = (patient) => {
-    if (!patient) return 'Unknown Patient'
-    if (patient.first_name && patient.last_name) {
-      return `${patient.first_name} ${patient.last_name}`
-    }
-    return patient.username || 'Unknown Patient'
-  }
-
-  const getDoctorName = (doctor) => {
-    if (!doctor) return 'Doctor TBD'
-    if (doctor.first_name && doctor.last_name) {
-      return `Dr. ${doctor.first_name} ${doctor.last_name}`
-    }
-    return doctor.username ? `Dr. ${doctor.username}` : 'Doctor TBD'
-  }
 
   const getWaitTime = (item) => {
     const time = item.arrived_at || item.check_in_time || item.created_at
@@ -527,7 +504,7 @@ const ReceptionistQueue = () => {
                       <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4" />
-                          <span>{getDoctorName(item.doctor)}</span>
+                          <span>{(() => { const dn = getDoctorName(item.doctor); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}</span>
                         </div>
                         <div className="flex items-center space-x-2">
                           <span className="font-medium">
@@ -722,10 +699,7 @@ const ReceptionistQueue = () => {
                     <option value="">Select a doctor</option>
                     {doctors.map(doctor => (
                       <option key={doctor.id} value={doctor.id}>
-                        {doctor.first_name && doctor.last_name 
-                          ? `Dr. ${doctor.first_name} ${doctor.last_name}`
-                          : `Dr. ${doctor.username}`
-                        }
+                        {(() => { const dn = getDoctorName(doctor); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                       </option>
                     ))}
                   </select>

@@ -3,9 +3,11 @@ import api from './apiService';
 export const getUsers = async () => {
   try {
     const response = await api.get('/admin/users');
-    return response.data;
+    // apiService returns parsed JSON body (not axios-style)
+    return response?.data || response || {};
   } catch (error) {
-    throw new Error(error.response?.data?.error || 'Failed to fetch users');
+    console.warn('Failed to fetch users:', error?.message || error);
+    return {};
   }
 };
 
@@ -22,18 +24,30 @@ export const createUser = async (userData) => {
 export const getUserStats = async () => {
   try {
     const response = await api.get('/admin/users/stats');
-    return response.data;
+    return response?.data || response || {};
   } catch (error) {
-    throw new Error(error.response?.data?.error || 'Failed to fetch user statistics');
+    console.warn('Failed to fetch user statistics:', error?.message || error);
+    return {};
   }
 };
 
 export const getBillingStats = async () => {
   try {
     const response = await api.get('/admin/billing/stats');
-    return response.data;
+    return response?.data || response || {};
   } catch (error) {
-    throw new Error(error.response?.data?.error || 'Failed to fetch billing statistics');
+    console.warn('Failed to fetch billing statistics:', error?.message || error);
+    return {};
+  }
+};
+
+export const getAdminOverview = async () => {
+  try {
+    const response = await api.get('/admin/overview');
+    return response?.data || response || {};
+  } catch (error) {
+    console.warn('Failed to fetch admin overview:', error?.message || error);
+    return {};
   }
 };
 

@@ -14,6 +14,7 @@ import {
   getAvailableDoctors 
 } from '../../services/receptionistService';
 import toast from 'react-hot-toast';
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers';
 
 const ReceptionistDashboardHome = () => {
   const navigate = useNavigate();
@@ -55,13 +56,15 @@ const ReceptionistDashboardHome = () => {
           (appointmentReqs.value?.data || appointmentReqs.value || []) : [];
         
         const patients = patientsData.status === 'fulfilled' ? 
-          (patientsData.value?.data || patientsData.value || []) : [];
+          (patientsData.value?.data || patientsData.value?.patients || patientsData.value || []) : [];
         
         const queue = queueData.status === 'fulfilled' ? 
           (queueData.value?.data || queueData.value || []) : [];
         
         const doctors = doctorsData.status === 'fulfilled' ? 
-          (doctorsData.value?.data || doctorsData.value || []) : [];
+          (doctorsData.value?.data || doctorsData.value?.doctors || doctorsData.value || []) : [];
+
+        console.log('Dashboard fetched:', { appointments: appointments.length, requests: requests.length, patients: Array.isArray(patients) ? patients.length : typeof patients, doctors: Array.isArray(doctors) ? doctors.length : typeof doctors })
 
         console.log('Processing data:', {
           appointments: appointments.length,
@@ -114,19 +117,28 @@ const ReceptionistDashboardHome = () => {
         const activity = [
           ...queue.slice(0, 2).map(patient => ({
             type: 'queue',
-            message: `${patient.patient?.first_name || patient.patient?.username || 'Patient'} checked in`,
-            time: patient.check_in_time || patient.createdAt,
+            message: `${getPatientName(patient)} checked in`,
+            time: patient.check_in_time || patient.createdAt || patient.checkInTime,
             status: 'info'
           })),
           ...requests.slice(0, 2).map(req => ({
             type: 'request',
-            message: `New appointment request from ${req.patient?.first_name || req.patient?.username || 'Patient'}`,
-            time: req.created_at || req.createdAt,
+            message: `New appointment request from ${getPatientName(req)}`,
+            time: req.created_at || req.createdAt || req.createdAt,
             status: 'warning'
           })),
+
           ...appointments.slice(0, 1).map(apt => ({
             type: 'appointment',
-            message: `Appointment scheduled with Dr. ${apt.doctor?.first_name || apt.doctor?.username || 'Doctor'}`,
+            message: (() => {
+              const patientLabel = (() => {
+                const pn = getPatientName(apt);
+                return pn === 'Patient Name N/A' ? 'Unassigned Patient' : pn;
+              })();
+              const dn = getDoctorName(apt);
+              const doctorLabel = /^Dr/i.test(dn) ? dn : `Dr. ${dn}`;
+              return `Appointment scheduled for ${patientLabel} with ${doctorLabel}`;
+            })(),
             time: apt.created_at || apt.createdAt,
             status: 'success'
           }))

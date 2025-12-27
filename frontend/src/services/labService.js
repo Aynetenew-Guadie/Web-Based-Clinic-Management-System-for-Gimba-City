@@ -1,27 +1,30 @@
 import api from './apiService';
 
-// Helper function to extract data from various response structures
+// Helper function to extract tests array from various response structures
 const extractLabData = (response) => {
-  if (!response || !response.data) return null;
-  
-  const data = response.data;
-  
-  // Handle different response structures
-  if (Array.isArray(data)) {
-    return data;
-  } else if (data.tests !== undefined) {
-    return data.tests;
-  } else if (data.data !== undefined) {
-    return data.data;
-  } else if (Array.isArray(data.data)) {
-    return data.data;
-  } else if (data.success && data.tests !== undefined) {
-    return data.tests;
-  } else if (data.success && Array.isArray(data.data)) {
-    return data.data;
-  }
-  
-  return data;
+  // apiService returns parsed JSON body (not axios-style), so normalize both shapes
+  if (!response) return null;
+
+  // Prefer top-level array
+  if (Array.isArray(response)) return response;
+
+  // If response has a data property that is an array, use it
+  if (Array.isArray(response.data)) return response.data;
+
+  // If response has tests field
+  if (Array.isArray(response.tests)) return response.tests;
+
+  // Some endpoints wrap payload in { success:true, data: [...] }
+  if (response.success && Array.isArray(response.data)) return response.data;
+
+  // If response.data exists and is an object that contains tests or data
+  const payload = response.data || response;
+  if (!payload) return null;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.tests)) return payload.tests;
+  if (Array.isArray(payload.data)) return payload.data;
+
+  return null;
 };
 
 // Helper function to handle API errors consistently
@@ -52,9 +55,10 @@ const fetchUserById = async (id) => {
 
   try {
     const resp = await api.get(`/admin/users/${key}`);
-    const user = resp.data?.user || resp.data?.data || resp.data;
-    userCache.set(key, user);
-    return user;
+    // apiService returns parsed JSON (not axios-style), so user may be at resp.user or resp.data.user
+    const user = resp?.user || resp?.data?.user || resp?.data || resp;
+    userCache.set(key, user || null);
+    return user || null;
   } catch (err) {
     console.warn('Failed to fetch user', id, err?.response?.data || err.message);
     userCache.set(key, null);
@@ -67,25 +71,27 @@ const enrichTestsWithUsers = async (tests) => {
 
   const userIds = new Set();
   tests.forEach(t => {
-    const p = t.labRequest?.patient || t.patient || t.patientId || t.patientInfo;
-    const d = t.labRequest?.doctor || t.doctor || t.requestedBy || t.requestedById;
+    // Support multiple shapes: nested labRequest.patient / patientId / labRequest.patientId etc.
+    const p = t.labRequest?.patient || t.patient || t.patientId || t.labRequest?.patientId || t.patientInfo || t.patient_id;
+    // Support multiple shapes for doctors: labRequest.doctor / doctor / requestedBy / doctorId / requested_by
+    const d = t.labRequest?.doctor || t.doctor || t.requestedBy || t.requestedById || t.labRequest?.doctorId || t.doctorId || t.labRequest?.requested_by || t.requested_by;
     if (p && (typeof p === 'string' || typeof p === 'number')) userIds.add(String(p));
     if (d && (typeof d === 'string' || typeof d === 'number')) userIds.add(String(d));
   });
 
-  // Parallel fetches
   await Promise.all(Array.from(userIds).map(id => fetchUserById(id)));
 
   // Attach fetched users back onto tests
   return tests.map(t => {
-    const patientId = t.labRequest?.patient || t.patient || t.patientId || t.patientInfo;
-    const doctorId = t.labRequest?.doctor || t.doctor || t.requestedBy || t.requestedById;
+    const patientId = t.labRequest?.patient || t.patient || t.patientId || t.labRequest?.patientId || t.patientInfo || t.patient_id;
+    const doctorId = t.labRequest?.doctor || t.doctor || t.requestedBy || t.requestedById || t.labRequest?.doctorId || t.doctorId || t.labRequest?.requested_by || t.requested_by;
     const patient = (typeof patientId === 'string' || typeof patientId === 'number') ? userCache.get(String(patientId)) : (patientId || null);
     const doctor = (typeof doctorId === 'string' || typeof doctorId === 'number') ? userCache.get(String(doctorId)) : (doctorId || null);
     return {
       ...t,
       labRequest: {
         ...(t.labRequest || {}),
+        // Preserve id fields while also populating resolved user objects
         patient: patient || (t.labRequest && t.labRequest.patient) || null,
         doctor: doctor || (t.labRequest && t.labRequest.doctor) || null
       },
@@ -99,9 +105,9 @@ export const getPendingTests = async () => {
   try {
     console.log('Fetching pending tests...');
     const response = await api.get('/lab/pending-tests');
-    
-    console.log('Pending tests raw response:', response.data);
-    
+
+    console.log('Pending tests raw response:', response);
+
     // Extract tests from response
     const tests = extractLabData(response);
     console.log('Extracted pending tests:', tests);
@@ -121,9 +127,9 @@ export const getInProgressTests = async () => {
   try {
     console.log('Fetching in-progress tests...');
     const response = await api.get('/lab/in-progress-tests');
-    
-    console.log('In-progress tests raw response:', response.data);
-    
+
+    console.log('In-progress tests raw response:', response);
+
     const tests = extractLabData(response);
     console.log('Extracted in-progress tests:', tests);
     
@@ -185,9 +191,9 @@ export const getCompletedTests = async () => {
   try {
     console.log('Fetching completed tests...');
     const response = await api.get('/lab/completed-tests');
-    
-    console.log('Completed tests raw response:', response.data);
-    
+
+    console.log('Completed tests raw response:', response);
+
     const tests = extractLabData(response);
     console.log('Extracted completed tests:', tests);
     

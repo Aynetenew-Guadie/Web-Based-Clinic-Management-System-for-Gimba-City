@@ -3,6 +3,7 @@ import { UserPlus, Search, User, Phone, Mail, Calendar, Loader, Eye, Plus, Edit,
 import { useAuth } from '../../contexts/AuthContext';
 import { registerPatient, getPatients, scheduleAppointment, scheduleAppointmentSimple, findWorkingAppointmentEndpoint } from '../../services/receptionistService';
 import toast from 'react-hot-toast';
+import { getPatientName } from '../../utils/nameHelpers';
 
 const ReceptionistPatients = () => {
   const { user } = useAuth()
@@ -208,7 +209,7 @@ const ReceptionistPatients = () => {
         ), { duration: 20000 })
       }
       
-      // Refresh patients list
+      // Refresh patients list (preferred) and also append the newly created patient to avoid UI delay
       try {
         const refreshed = await getPatients()
         
@@ -225,10 +226,55 @@ const ReceptionistPatients = () => {
         if (!Array.isArray(refreshedArray)) {
           refreshedArray = [];
         }
-        
+
+        // Build a patient object from the registration response (handle different response shapes)
+        let created = null;
+        if (response && response.patient) {
+          created = {
+            id: response.patient.id || response.patientId || response.id || null,
+            patientId: response.patient.patientId || response.patientId || response.patient.employee_id || null,
+            username: response.patient.username || response.patient.username || (response.patient.email || '').split('@')[0],
+            email: response.patient.email || null,
+            first_name: response.patient.firstName || response.patient.first_name || null,
+            last_name: response.patient.lastName || response.patient.last_name || null,
+            phone: response.patient.phone || null
+          };
+        } else if (response && response.id) {
+          // fallback registration returned the patient object directly
+          created = response;
+        }
+
+        // Prepend the newly created patient when missing from refreshed list
+        if (created) {
+          const exists = refreshedArray.some(p => p.id === created.id || p.patientId === created.patientId || p.email === created.email);
+          if (!exists) refreshedArray = [created, ...refreshedArray];
+        }
+
         setPatients(refreshedArray)
       } catch (refreshError) {
         console.log('Could not refresh patients list:', refreshError)
+
+        // Append the created patient locally as a best-effort fallback so receptionist immediately sees it
+        try {
+          let created = null;
+          if (response && response.patient) {
+            created = {
+              id: response.patient.id || response.patientId || response.id || Date.now(),
+              patientId: response.patient.patientId || response.patientId || response.patient.employee_id || `PAT${Date.now().toString().slice(-6)}`,
+              username: response.patient.username || (response.patient.email || '').split('@')[0],
+              email: response.patient.email || null,
+              first_name: response.patient.firstName || response.patient.first_name || null,
+              last_name: response.patient.lastName || response.patient.last_name || null,
+              phone: response.patient.phone || null
+            };
+          } else if (response && response.id) {
+            created = response;
+          }
+
+          if (created) setPatients(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
+        } catch (appendError) {
+          console.log('Also failed to append created patient locally:', appendError)
+        }
       }
       
       setNewPatient({
@@ -267,17 +313,6 @@ const ReceptionistPatients = () => {
     }
   }
 
-  const getPatientName = (patient) => {
-    if (!patient) return 'Unknown Patient';
-    
-    if (patient.name) {
-      return patient.name;
-    }
-    if (patient.first_name && patient.last_name) {
-      return `${patient.first_name} ${patient.last_name}`
-    }
-    return patient.username || patient.email || 'Unknown Patient'
-  }
 
   const getPatientAge = (patient) => {
     if (!patient) return 'N/A';

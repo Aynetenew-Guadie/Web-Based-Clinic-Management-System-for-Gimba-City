@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Phone, Mail, Calendar, Activity, FileText, Pill, Loader } from 'lucide-react';
 import { getPatientRecords, getPatientSummary } from '../../services/doctorService';
 import toast from 'react-hot-toast';
+import { getPatientName as getPatientNameHelper } from '../../utils/nameHelpers';
 
 const PatientDetail = () => {
   const { patientId } = useParams();
@@ -62,12 +63,7 @@ const PatientDetail = () => {
     }
   }, [patientId]);
 
-  const getPatientName = (patient) => {
-    if (patient?.first_name && patient?.last_name) {
-      return `${patient.first_name} ${patient.last_name}`;
-    }
-    return patient?.username || 'Unknown Patient';
-  };
+  const getPatientName = (patient) => getPatientNameHelper(patient);
 
   const getPatientAge = (patient) => {
     if (patient?.age) {

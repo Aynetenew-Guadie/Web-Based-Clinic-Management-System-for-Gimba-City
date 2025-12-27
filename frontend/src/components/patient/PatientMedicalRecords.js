@@ -3,6 +3,7 @@ import { FileText, Calendar, User, Download, Loader, Search, Filter, Eye, Clock,
 import { useAuth } from '../../contexts/AuthContext';
 import { getMedicalRecords } from '../../services/patientService';
 import { toast } from 'react-hot-toast';
+import { getDoctorName } from '../../utils/nameHelpers';
 
 const PatientMedicalRecords = () => {
   const { user } = useAuth();
@@ -45,12 +46,12 @@ const PatientMedicalRecords = () => {
   }, [user]);
 
   const filteredRecords = records.filter(record => {
-    const matchesSearch = record.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.doctor?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.doctor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.summary?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.chief_complaint?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = (record.type || '').toLowerCase().includes(term) ||
+                         getDoctorName(record).toLowerCase().includes(term) ||
+                         (record.summary || '').toLowerCase().includes(term) ||
+                         (record.diagnosis || '').toLowerCase().includes(term) ||
+                         (record.chief_complaint || '').toLowerCase().includes(term);
     const matchesType = filterType === 'all' || record.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -104,7 +105,7 @@ Date: ${new Date(record.date || record.createdAt).toLocaleDateString()}
 VISIT DETAILS:
 --------------
 Type: ${getRecordTypeText(record.type)}
-Doctor: ${record.doctor?.username || record.doctor?.name || record.doctor || 'Unknown Doctor'}
+Doctor: ${getDoctorName(record)}
 ${record.doctor?.employee_id ? `Doctor ID: ${record.doctor.employee_id}\n` : ''}
 Date: ${new Date(record.date || record.createdAt).toLocaleDateString()}
 ${record.duration ? `Duration: ${record.duration}\n` : ''}
@@ -262,7 +263,7 @@ This is a computer-generated report. Please consult with your healthcare provide
                       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
                         <span className="flex items-center space-x-1">
                           <User className="h-4 w-4" />
-                          <span>{record.doctor?.username || record.doctor?.name || record.doctor || 'Unknown Doctor'}</span>
+                          <span>{getDoctorName(record)}</span>
                         </span>
                         <span>•</span>
                         <span className="flex items-center space-x-1">
@@ -448,7 +449,7 @@ This is a computer-generated report. Please consult with your healthcare provide
                       )}
                       <div>
                         <span className="text-gray-600 font-medium">Doctor: </span>
-                        <span className="text-gray-800">{selectedRecord.doctor?.username || selectedRecord.doctor?.name || selectedRecord.doctor || 'Unknown Doctor'}</span>
+                        <span className="text-gray-800">{getDoctorName(selectedRecord)}</span>
                       </div>
                       {selectedRecord.doctor?.employee_id && (
                         <div>

@@ -10,6 +10,7 @@ import {
   processAppointmentRequest 
 } from '../../services/receptionistService'
 import toast from 'react-hot-toast'
+import { getPatientName, getDoctorName } from '../../utils/nameHelpers'
 
 const ReceptionistAppointments = () => {
   const { user } = useAuth()
@@ -57,6 +58,30 @@ const ReceptionistAppointments = () => {
     notes: ''
   })
 
+  // Precompute filtered dropdown options to simplify JSX and avoid complex inline ternaries
+  const filteredPatientOptions = Array.isArray(patients)
+    ? patients.filter(patient => {
+        const searchLower = (patientSearch || '').toLowerCase()
+        const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.toLowerCase()
+        const username = (patient.username || '').toLowerCase()
+        const email = (patient.email || '').toLowerCase()
+        const phone = (patient.phone || '').toLowerCase()
+        const patientId = (patient.patientId || patient.id || patient.employee_id || '').toString()
+        return fullName.includes(searchLower) || username.includes(searchLower) || email.includes(searchLower) || phone.includes(searchLower) || patientId.includes(searchLower)
+      }).slice(0, 20)
+    : []
+
+  const filteredDoctorOptions = Array.isArray(doctors)
+    ? doctors.filter(doctor => {
+        const searchLower = (doctorSearch || '').toLowerCase()
+        const fullName = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase()
+        const username = (doctor.username || '').toLowerCase()
+        const employeeId = (doctor.employee_id || '').toLowerCase()
+        const doctorId = (doctor.employee_id || doctor.id || '').toString()
+        return fullName.includes(searchLower) || username.includes(searchLower) || employeeId.includes(searchLower) || doctorId.includes(searchLower)
+      }).slice(0, 20)
+    : []
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -78,17 +103,25 @@ const ReceptionistAppointments = () => {
           (appointmentRequests.value?.data || appointmentRequests.value || []) : []
         
         const patients = patientsData.status === 'fulfilled' ? 
-          (patientsData.value?.data || patientsData.value || []) : []
+          (patientsData.value?.data || patientsData.value?.patients || patientsData.value || []) : []
         
         const doctors = doctorsData.status === 'fulfilled' ? 
-          (doctorsData.value?.data || doctorsData.value || []) : []
+          (doctorsData.value?.data || doctorsData.value?.doctors || doctorsData.value || []) : []
        
         // Combine appointments and requests
         const allAppointments = [
           ...scheduledData.map(apt => ({ ...apt, type: 'scheduled' })),
           ...requestsData.map(req => ({ ...req, type: 'request' }))
         ]
-        
+
+        console.log('ReceptionistAppointments fetched counts:', {
+          appointments: allAppointments.length,
+          patientsType: Array.isArray(patients) ? 'array' : typeof patients,
+          patientsLength: Array.isArray(patients) ? patients.length : undefined,
+          doctorsType: Array.isArray(doctors) ? 'array' : typeof doctors,
+          doctorsLength: Array.isArray(doctors) ? doctors.length : undefined
+        })
+
         setAppointments(allAppointments)
         setPatients(patients)
         setDoctors(doctors)
@@ -117,7 +150,7 @@ const ReceptionistAppointments = () => {
     const matchesSearch = searchTerm === '' || 
       (apt.patient?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
        apt.doctor?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       apt.patient?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       getPatientName(apt).toLowerCase().includes(searchTerm.toLowerCase()) ||
        apt.patient?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
        apt.doctor?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
        apt.doctor?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -261,7 +294,7 @@ const ReceptionistAppointments = () => {
       endTime: defaultEndTime,
       roomNumber: '',
       notes: request.notes || '',
-      doctorName: request.preferredDoctor?.username || ''
+      doctorName: (getDoctorName(request) || '').replace(/^Dr\.?\s*/i, ''),
     })
     setShowApprovalModal(true)
   }
@@ -469,33 +502,16 @@ const ReceptionistAppointments = () => {
                   placeholder="Search patients by name or ID..."
                   required
                 />
-                {showPatientDropdown && patients.length > 0 && (
+                {showPatientDropdown && (Array.isArray(patients) && patients.length > 0) && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {patients
-                      .filter(patient => {
-                        const searchLower = patientSearch.toLowerCase()
-                        const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.toLowerCase()
-                        const username = (patient.username || '').toLowerCase()
-                        const employeeId = (patient.employee_id || '').toLowerCase()
-                        const patientId = patient.id.toString()
-                        return fullName.includes(searchLower) || 
-                               username.includes(searchLower) || 
-                               employeeId.includes(searchLower) ||
-                               patientId.includes(searchLower)
-                      })
-                      .slice(0, 20)
-                      .map(patient => (
+                    {filteredPatientOptions.map(patient => (
                         <div
                           key={patient.id}
                           className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
                           onClick={(e) => {
                             e.stopPropagation()
                             setNewAppointment(prev => ({...prev, patientId: patient.id}))
-                            setPatientSearch(
-                              patient.first_name && patient.last_name 
-                                ? `${patient.first_name} ${patient.last_name} (ID: ${patient.id})`
-                                : `${patient.username} (ID: ${patient.id})`
-                            )
+                            setPatientSearch(`${getPatientName(patient)} (ID: ${patient.id})`)
                             setShowPatientDropdown(false)
                           }}
                         >
@@ -511,17 +527,7 @@ const ReceptionistAppointments = () => {
                         </div>
                       ))
                     }
-                    {patients.filter(patient => {
-                      const searchLower = patientSearch.toLowerCase()
-                      const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.toLowerCase()
-                      const username = (patient.username || '').toLowerCase()
-                      const employeeId = (patient.employee_id || '').toLowerCase()
-                      const patientId = patient.id.toString()
-                      return fullName.includes(searchLower) || 
-                             username.includes(searchLower) || 
-                             employeeId.includes(searchLower) ||
-                             patientId.includes(searchLower)
-                    }).length === 0 && (
+                    {filteredPatientOptions.length === 0 && (
                       <div className="px-3 py-2 text-gray-500 text-center">
                         No patients found
                       </div>
@@ -547,41 +553,21 @@ const ReceptionistAppointments = () => {
                   placeholder="Search doctors by name or ID..."
                   required
                 />
-                {showDoctorDropdown && doctors.length > 0 && (
+                {showDoctorDropdown && (Array.isArray(doctors) && doctors.length > 0) && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {doctors
-                      .filter(doctor => {
-                        const searchLower = doctorSearch.toLowerCase()
-                        const fullName = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase()
-                        const username = (doctor.username || '').toLowerCase()
-                        const employeeId = (doctor.employee_id || '').toLowerCase()
-                        const doctorId = doctor.id.toString()
-                        return fullName.includes(searchLower) || 
-                               username.includes(searchLower) || 
-                               employeeId.includes(searchLower) ||
-                               doctorId.includes(searchLower)
-                      })
-                      .slice(0, 20)
-                      .map(doctor => (
+                    {filteredDoctorOptions.map(doctor => (
                         <div
                           key={doctor.id}
                           className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
                           onClick={(e) => {
                             e.stopPropagation()
                             setNewAppointment(prev => ({...prev, doctorId: doctor.id}))
-                            setDoctorSearch(
-                              doctor.first_name && doctor.last_name 
-                                ? `Dr. ${doctor.first_name} ${doctor.last_name} (ID: ${doctor.id})`
-                                : `Dr. ${doctor.username} (ID: ${doctor.id})`
-                            )
+                            setDoctorSearch((() => { const dn = getDoctorName(doctor); return /^Dr/i.test(dn) ? `${dn} (ID: ${doctor.id})` : `Dr. ${dn} (ID: ${doctor.id})` })())
                             setShowDoctorDropdown(false)
                           }}
                         >
                           <div className="font-medium">
-                            {doctor.first_name && doctor.last_name 
-                              ? `Dr. ${doctor.first_name} ${doctor.last_name}`
-                              : `Dr. ${doctor.username}`
-                            }
+                            {(() => { const dn = getDoctorName(doctor); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                           </div>
                           <div className="text-sm text-gray-500">
                             ID: {doctor.id} {doctor.specialization && `• ${doctor.specialization}`}
@@ -589,17 +575,7 @@ const ReceptionistAppointments = () => {
                         </div>
                       ))
                     }
-                    {doctors.filter(doctor => {
-                      const searchLower = doctorSearch.toLowerCase()
-                      const fullName = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase()
-                      const username = (doctor.username || '').toLowerCase()
-                      const employeeId = (doctor.employee_id || '').toLowerCase()
-                      const doctorId = doctor.id.toString()
-                      return fullName.includes(searchLower) || 
-                             username.includes(searchLower) || 
-                             employeeId.includes(searchLower) ||
-                             doctorId.includes(searchLower)
-                    }).length === 0 && (
+                    {filteredDoctorOptions.length === 0 && (
                       <div className="px-3 py-2 text-gray-500 text-center">
                         No doctors found
                       </div>
@@ -773,18 +749,10 @@ const ReceptionistAppointments = () => {
                     </div>
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {apt.patient?.username || 
-                         (apt.patient?.first_name && apt.patient?.last_name ? 
-                          `${apt.patient.first_name} ${apt.patient.last_name}` : 
-                          apt.patient_name || 
-                          'Patient Name N/A')}
+                        {getPatientName(apt)}
                       </h3>
                       <p className="text-sm text-gray-600">
-                        Dr. {apt.doctor?.username || 
-                             (apt.doctor?.first_name && apt.doctor?.last_name ? 
-                              `${apt.doctor.first_name} ${apt.doctor.last_name}` : 
-                              apt.doctor_name || 
-                              'Doctor Name N/A')}
+                        {(() => { const dn = getDoctorName(apt); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                       </p>
                       {apt.type === 'request' && (
                         <span className="inline-block px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full mt-1">
@@ -923,10 +891,7 @@ const ReceptionistAppointments = () => {
               Approve Appointment Request
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Patient: {selectedRequest.patient?.username || 
-                       (selectedRequest.patient?.first_name && selectedRequest.patient?.last_name ? 
-                        `${selectedRequest.patient.first_name} ${selectedRequest.patient.last_name}` : 
-                        'N/A')}
+              Patient: {getPatientName(selectedRequest)}
             </p>
             
             <div className="space-y-4">
@@ -943,10 +908,7 @@ const ReceptionistAppointments = () => {
                   <option value="">Select a doctor</option>
                   {doctors.map(doctor => (
                     <option key={doctor.id} value={doctor.id}>
-                      {doctor.first_name && doctor.last_name 
-                        ? `Dr. ${doctor.first_name} ${doctor.last_name}`
-                        : `Dr. ${doctor.username}`
-                      } (ID: {doctor.id})
+{(() => { const dn = getDoctorName(doctor); return /^Dr/i.test(dn) ? `${dn} (ID: ${doctor.id})` : `Dr. ${dn} (ID: ${doctor.id})` })()}
                     </option>
                   ))}
                 </select>
@@ -1046,10 +1008,7 @@ const ReceptionistAppointments = () => {
               Reschedule Appointment
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Patient: {selectedAppointment.patient?.username || 
-                       (selectedAppointment.patient?.first_name && selectedAppointment.patient?.last_name ? 
-                        `${selectedAppointment.patient.first_name} ${selectedAppointment.patient.last_name}` : 
-                        'N/A')}
+              Patient: {getPatientName(selectedAppointment)}
             </p>
             
             <div className="space-y-4">
@@ -1105,10 +1064,7 @@ const ReceptionistAppointments = () => {
                   <option value="">Keep current doctor</option>
                   {doctors.map(doctor => (
                     <option key={doctor.id} value={doctor.id}>
-                      {doctor.first_name && doctor.last_name 
-                        ? `Dr. ${doctor.first_name} ${doctor.last_name}`
-                        : `Dr. ${doctor.username}`
-                      }
+{(() => { const dn = getDoctorName(doctor); return /^Dr/i.test(dn) ? dn : `Dr. ${dn}` })()}
                     </option>
                   ))}
                 </select>

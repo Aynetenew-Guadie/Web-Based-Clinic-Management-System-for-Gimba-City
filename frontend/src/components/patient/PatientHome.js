@@ -9,6 +9,7 @@ import {
   getBillingHistory 
 } from '../../services/patientService';
 import { toast } from 'react-hot-toast';
+import { getDoctorName } from '../../utils/nameHelpers';
 
 const PatientHome = () => {
   const { user } = useAuth();
@@ -85,7 +86,7 @@ const PatientHome = () => {
         activities.push({
           id: `apt-${apt.id}`,
           type: 'appointment',
-          title: `Appointment with Dr. ${apt.doctor?.username || apt.doctorName || 'Doctor'}`,
+          title: `Appointment with ${getDoctorName(apt)}`,
           description: `${apt.visit_type || apt.type || 'Appointment'} on ${new Date(apt.appointment_date || apt.date).toLocaleDateString()}`,
           time: new Date(apt.createdAt || apt.date).toLocaleDateString(),
           status: apt.status === 'scheduled' ? 'upcoming' : apt.status === 'completed' ? 'completed' : 'active'

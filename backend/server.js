@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+// Global handlers to capture hidden crashes during dev
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught exception:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', (reason, p) => {
+    console.error('❌ Unhandled rejection at:', p, 'reason:', reason);
+});
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -66,12 +74,46 @@ users.push({
     createdAt: '2024-01-01'
 });
 
+// Add a sample lab technician user so labResults can show technician info in dev
+users.push({
+    id: 4,
+    email: 'lab.tech@clinic.com',
+    password: '$2b$10$examplehashedpassword',
+    name: 'Lab Technician A',
+    first_name: 'Lab',
+    last_name: 'Technician A',
+    role: 'lab_technician',
+    clinicId: 1,
+    isActive: true,
+    createdAt: '2024-01-01'
+});
+
 // Mock data for other entities
 let appointments = [
     { id: 1, patientId: 1, patientName: 'John Doe', doctorId: 2, doctorName: 'Dr. Michael Brown', date: '2024-01-15', time: '10:00 AM', status: 'completed', type: 'Checkup' },
     { id: 2, patientId: 2, patientName: 'Alice Johnson', doctorId: 2, doctorName: 'Dr. Michael Brown', date: '2024-01-15', time: '11:00 AM', status: 'pending', type: 'Consultation' },
     { id: 3, patientId: 3, patientName: 'Bob Smith', doctorId: 2, doctorName: 'Dr. Michael Brown', date: '2024-01-16', time: '09:30 AM', status: 'scheduled', type: 'Follow-up' }
 ];
+
+// Retroactively enrich in-memory appointments with any missing patient/doctor information
+appointments = appointments.map(appt => {
+    const enriched = { ...appt };
+    if (!enriched.patientName) {
+        const p = patients.find(x => x.id === enriched.patientId || x.patientId === enriched.patientId);
+        if (p) {
+            enriched.patientName = p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+            enriched.patient = { id: p.id, name: enriched.patientName, email: p.email, phone: p.phone };
+        }
+    }
+    if (!enriched.doctorName) {
+        const d = users.find(u => u.id === enriched.doctorId || u.doctor_id === enriched.doctorId);
+        if (d) {
+            enriched.doctorName = d.name || d.first_name || `Dr. ${d.id}`;
+            enriched.doctor = { id: d.id, name: enriched.doctorName, email: d.email };
+        }
+    }
+    return enriched;
+});
 
 let patients = [
     { id: 1, name: 'John Doe', email: 'john@example.com', phone: '+1234567890', age: 35, gender: 'Male', lastVisit: '2024-01-15' },
@@ -397,6 +439,17 @@ app.get('/api/admin/users', (req, res) => {
         data: enhancedUsers,
         count: users.length
     });
+});
+
+// GET a single user by ID (returns user without password fields)
+app.get('/api/admin/users/:id', (req, res) => {
+    console.log('🔎 /api/admin/users/:id requested for id=', req.params.id);
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, error: 'Invalid user id' });
+    const user = users.find(u => u.id === id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const { password, password_hash, ...userWithoutPassword } = user;
+    return res.json({ success: true, user: userWithoutPassword });
 });
 
 // CREATE new user
@@ -1070,9 +1123,11 @@ function createAppointmentFromBody(body) {
     const newAppointment = {
         id: appointments.length + 1,
         patientId: normalizedPatientId,
-        patientName: null,
+        // allow direct patient name when id is not available (clients may send patientName/patient_name or patient object)
+        patientName: (body.patientName || body.patient_name || (body.patient && (body.patient.name || body.patient.username)) || null),
         doctorId: normalizedDoctorId,
-        doctorName: null,
+        // allow doctor name when id is not available
+        doctorName: (body.doctorName || body.doctor_name || null),
         date: appointmentDate || appointment_date || new Date().toISOString().split('T')[0],
         time: startTime || start_time || '09:00',
         endTime: endTime || end_time || '10:00',
@@ -1094,6 +1149,12 @@ function createAppointmentFromBody(body) {
             phone: patient.phone,
             first_name: patient.first_name,
             last_name: patient.last_name
+        };
+    } else if (newAppointment.patientName) {
+        // If a patient name was provided without an id, attach a minimal patient object for frontend display
+        newAppointment.patient = {
+            id: null,
+            name: newAppointment.patientName
         };
     }
 
@@ -1204,7 +1265,34 @@ app.get('/api/doctor/lab-requests', (req, res) => {
 });
 
 app.get('/api/doctor/lab-results', (req, res) => {
-    res.json({ success: true, data: labResults });
+    console.log('🔎 /api/doctor/lab-results (legacy) requested');
+    try {
+        const enriched = labResults.map(r => {
+            const patient = (typeof r.patient === 'object' && r.patient) || patients.find(p => p.id === r.patientId) || users.find(u => u.id === r.patientId) || null;
+            const technician = (typeof r.technician === 'object' && r.technician) || (r.technicianId ? users.find(u => u.id === r.technicianId) : null);
+            const reqItem = labRequests.find(lr => lr.id === r.labRequestId) || null;
+            const reqPatient = reqItem ? ((typeof reqItem.patient === 'object' && reqItem.patient) || patients.find(p => p.id === reqItem.patientId) || users.find(u => u.id === reqItem.patientId) || null) : null;
+            const reqDoctor = reqItem ? ((typeof reqItem.doctor === 'object' && reqItem.doctor) || (reqItem.doctorId ? users.find(u => u.id === reqItem.doctorId) : null)) : null;
+            const reqTechnician = reqItem ? ((typeof reqItem.technician === 'object' && reqItem.technician) || (reqItem.technicianId ? users.find(u => u.id === reqItem.technicianId) : null)) : null;
+            const enrichedReq = reqItem ? {
+                ...reqItem,
+                patient: reqPatient ? { id: reqPatient.id, username: reqPatient.username || reqPatient.name || (reqPatient.email && reqPatient.email.split('@')?.[0]), name: reqPatient.name || `${reqPatient.first_name || ''} ${reqPatient.last_name || ''}`.trim() } : null,
+                doctor: reqDoctor ? { id: reqDoctor.id, username: reqDoctor.username || reqDoctor.name || (reqDoctor.email && reqDoctor.email.split('@')?.[0]), name: reqDoctor.name || `${reqDoctor.first_name || ''} ${reqDoctor.last_name || ''}`.trim() } : null,
+                technician: reqTechnician ? { id: reqTechnician.id, username: reqTechnician.username || reqTechnician.name || (reqTechnician.email && reqTechnician.email.split('@')?.[0]), name: reqTechnician.name || `${reqTechnician.first_name || ''} ${reqTechnician.last_name || ''}`.trim() } : null
+            } : null;
+
+            return {
+                ...r,
+                labRequest: enrichedReq,
+                patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')?.[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+                technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')?.[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+            };
+        });
+        return res.json({ success: true, labResults: enriched, count: enriched.length });
+    } catch (err) {
+        console.error('Error enriching legacy doctor lab-results:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch lab results' });
+    }
 });
 
 app.get('/api/doctor/lab-technicians', (req, res) => {
@@ -1218,16 +1306,24 @@ app.post('/api/doctor/lab-requests', (req, res) => {
     try {
         const body = req.body || {};
         const nextId = labRequests.length ? Math.max(...labRequests.map(r => r.id)) + 1 : 1;
+        // Determine doctor id (support body fields or default to sample doctor for mock)
+        const determinedDoctorId = body.doctorId || body.doctor_id || (req.user && req.user.id) || 2;
         const newRequest = {
             id: nextId,
             patientId: body.patientId || body.patient_id || null,
-            doctorId: body.doctorId || body.doctor_id || null,
+            doctorId: determinedDoctorId,
             technicianId: body.technicianId || body.technician_id || null,
             testType: body.testType || body.test_type || body.test || 'Unknown Test',
             urgency: body.urgency || 'normal',
             notes: body.notes || '',
             status: body.status || 'pending',
-            dateRequested: new Date().toISOString()
+            dateRequested: new Date().toISOString(),
+            // Include a lightweight doctor object when available to help front-end
+            doctor: (() => {
+                const d = users.find(u => u.id === determinedDoctorId);
+                if (!d) return null;
+                return { id: d.id, username: d.username || d.email?.split('@')?.[0], name: d.name || `${d.first_name || ''} ${d.last_name || ''}`.trim() };
+            })()
         };
 
         labRequests.push(newRequest);
@@ -1535,10 +1631,37 @@ app.get('/api/reception/dashboard', (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const todayAppointments = appointments.filter(a => a.date === today);
 
+    // Enrich appointments that may lack patient/doctor names (some test data or incoming payloads omit these fields)
+    const enrichedTodayAppointments = todayAppointments.map(a => {
+        const appt = { ...a };
+        if (!appt.patientName) {
+            const patient = patients.find(p => p.id === appt.patientId || p.patientId === appt.patientId);
+            if (patient) {
+                appt.patientName = patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+                appt.patient = {
+                    id: patient.id,
+                    name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+                    email: patient.email,
+                    phone: patient.phone
+                };
+            } else if (appt.patient && appt.patient.name) {
+                appt.patientName = appt.patient.name;
+            }
+        }
+        if (!appt.doctorName) {
+            const doctor = users.find(u => u.id === appt.doctorId || u.doctor_id === appt.doctorId);
+            if (doctor) {
+                appt.doctorName = doctor.name || doctor.first_name || `Dr. ${doctor.id}`;
+                appt.doctor = { id: doctor.id, name: appt.doctorName, email: doctor.email };
+            }
+        }
+        return appt;
+    });
+
     res.json({
         success: true,
         data: {
-            checkins: todayAppointments.filter(a => a.status === 'completed').length,
+            checkins: enrichedTodayAppointments.filter(a => a.status === 'completed').length,
             appointments: appointments.length,
             newPatients: patients.filter(p => {
                 const weekAgo = new Date();
@@ -1546,14 +1669,14 @@ app.get('/api/reception/dashboard', (req, res) => {
                 return new Date(p.lastVisit) >= weekAgo;
             }).length,
             pendingPayments: 8,
-            todayAppointments: todayAppointments,
+            todayAppointments: enrichedTodayAppointments,
             waitingPatients: patients.slice(0, 3),
             upcomingBookings: appointments
                 .filter(a => new Date(a.date) >= new Date())
                 .slice(0, 5),
             stats: {
-                scheduledToday: todayAppointments.length,
-                checkedIn: todayAppointments.filter(a => a.status === 'completed').length,
+                scheduledToday: enrichedTodayAppointments.length,
+                checkedIn: enrichedTodayAppointments.filter(a => a.status === 'completed').length,
                 noShows: 2,
                 revenueCollected: 3200,
                 registrationQueue: 3
@@ -2265,20 +2388,158 @@ app.post('/api/debug/reset-admin', async (req, res) => {
 app.get('/api/lab/pending-tests', (req, res) => {
     console.log('🔎 /api/lab/pending-tests requested, query:', req.query);
     const list = labRequests.filter(lr => !lr.status || lr.status === 'pending');
-    return res.json({ success: true, data: list, count: list.length });
+    // Enrich with patient/doctor/technician objects from in-memory stores to avoid frontend ambiguity
+    const enriched = list.map(lr => {
+        const patient = (typeof lr.patient === 'object' && lr.patient) || patients.find(p => p.id === lr.patientId) || (users.find(u => u.id === lr.patientId) ? users.find(u => u.id === lr.patientId) : null);
+        const doctor = (typeof lr.doctor === 'object' && lr.doctor) || (lr.doctorId ? users.find(u => u.id === lr.doctorId) : null);
+        const technician = (typeof lr.technician === 'object' && lr.technician) || (lr.technicianId ? users.find(u => u.id === lr.technicianId) : null);
+        return {
+            ...lr,
+            patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+            doctor: doctor ? { id: doctor.id, username: doctor.username || doctor.name || (doctor.email && doctor.email.split('@')[0]), name: doctor.name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() } : null,
+            technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+        };
+    });
+    return res.json({ success: true, data: enriched, count: enriched.length });
 });
 
 // GET in-progress tests (assigned to a technician)
 app.get('/api/lab/in-progress-tests', (req, res) => {
     console.log('🔎 /api/lab/in-progress-tests requested, query:', req.query);
     const list = labRequests.filter(lr => lr.status === 'in_progress' || lr.status === 'processing');
-    return res.json({ success: true, data: list, count: list.length });
+    const enriched = list.map(lr => {
+        const patient = (typeof lr.patient === 'object' && lr.patient) || patients.find(p => p.id === lr.patientId) || (users.find(u => u.id === lr.patientId) ? users.find(u => u.id === lr.patientId) : null);
+        const doctor = (typeof lr.doctor === 'object' && lr.doctor) || (lr.doctorId ? users.find(u => u.id === lr.doctorId) : null);
+        const technician = (typeof lr.technician === 'object' && lr.technician) || (lr.technicianId ? users.find(u => u.id === lr.technicianId) : null);
+        return {
+            ...lr,
+            patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+            doctor: doctor ? { id: doctor.id, username: doctor.username || doctor.name || (doctor.email && doctor.email.split('@')[0]), name: doctor.name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() } : null,
+            technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+        };
+    });
+    return res.json({ success: true, data: enriched, count: enriched.length });
 });
 
 // GET completed tests (from labResults)
 app.get('/api/lab/completed-tests', (req, res) => {
     console.log('🔎 /api/lab/completed-tests requested, query:', req.query);
-    return res.json({ success: true, data: labResults, count: labResults.length });
+    try {
+        const enriched = labResults.map(r => {
+            const patient = (typeof r.patient === 'object' && r.patient) || patients.find(p => p.id === r.patientId) || users.find(u => u.id === r.patientId) || null;
+            const technician = (typeof r.technician === 'object' && r.technician) || (r.technicianId ? users.find(u => u.id === r.technicianId) : null);
+
+            // Attach the originating lab request, enriched with patient/doctor/technician as in other endpoints
+            const reqItem = labRequests.find(lr => lr.id === r.labRequestId) || null;
+            const reqPatient = reqItem ? ((typeof reqItem.patient === 'object' && reqItem.patient) || patients.find(p => p.id === reqItem.patientId) || users.find(u => u.id === reqItem.patientId) || null) : null;
+            const reqDoctor = reqItem ? ((typeof reqItem.doctor === 'object' && reqItem.doctor) || (reqItem.doctorId ? users.find(u => u.id === reqItem.doctorId) : null)) : null;
+            const reqTechnician = reqItem ? ((typeof reqItem.technician === 'object' && reqItem.technician) || (reqItem.technicianId ? users.find(u => u.id === reqItem.technicianId) : null)) : null;
+            const enrichedReq = reqItem ? {
+                ...reqItem,
+                patient: reqPatient ? { id: reqPatient.id, username: reqPatient.username || reqPatient.name || (reqPatient.email && reqPatient.email.split('@')?.[0]), name: reqPatient.name || `${reqPatient.first_name || ''} ${reqPatient.last_name || ''}`.trim() } : null,
+                doctor: reqDoctor ? { id: reqDoctor.id, username: reqDoctor.username || reqDoctor.name || (reqDoctor.email && reqDoctor.email.split('@')?.[0]), name: reqDoctor.name || `${reqDoctor.first_name || ''} ${reqDoctor.last_name || ''}`.trim() } : null,
+                technician: reqTechnician ? { id: reqTechnician.id, username: reqTechnician.username || reqTechnician.name || (reqTechnician.email && reqTechnician.email.split('@')?.[0]), name: reqTechnician.name || `${reqTechnician.first_name || ''} ${reqTechnician.last_name || ''}`.trim() } : null
+            } : null;
+
+            return {
+                ...r,
+                labRequest: enrichedReq,
+                patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')?.[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+                technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')?.[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+            };
+        });
+        return res.json({ success: true, data: enriched, count: enriched.length });
+    } catch (err) {
+        console.error('Error enriching completed-tests:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch completed tests' });
+    }
+});
+
+// Additional endpoints expected by doctorService: return same enriched results under /lab-results and /doctor/lab-results
+app.get('/api/lab-results', (req, res) => {
+    console.log('🔎 /api/lab-results requested');
+    try {
+        const enriched = labResults.map(r => {
+            const patient = (typeof r.patient === 'object' && r.patient) || patients.find(p => p.id === r.patientId) || users.find(u => u.id === r.patientId) || null;
+            const technician = (typeof r.technician === 'object' && r.technician) || (r.technicianId ? users.find(u => u.id === r.technicianId) : null);
+            const reqItem = labRequests.find(lr => lr.id === r.labRequestId) || null;
+            const reqPatient = reqItem ? ((typeof reqItem.patient === 'object' && reqItem.patient) || patients.find(p => p.id === reqItem.patientId) || users.find(u => u.id === reqItem.patientId) || null) : null;
+            const reqDoctor = reqItem ? ((typeof reqItem.doctor === 'object' && reqItem.doctor) || (reqItem.doctorId ? users.find(u => u.id === reqItem.doctorId) : null)) : null;
+            const reqTechnician = reqItem ? ((typeof reqItem.technician === 'object' && reqItem.technician) || (reqItem.technicianId ? users.find(u => u.id === reqItem.technicianId) : null)) : null;
+            const enrichedReq = reqItem ? {
+                ...reqItem,
+                patient: reqPatient ? { id: reqPatient.id, username: reqPatient.username || reqPatient.name || (reqPatient.email && reqPatient.email.split('@')?.[0]), name: reqPatient.name || `${reqPatient.first_name || ''} ${reqPatient.last_name || ''}`.trim() } : null,
+                doctor: reqDoctor ? { id: reqDoctor.id, username: reqDoctor.username || reqDoctor.name || (reqDoctor.email && reqDoctor.email.split('@')?.[0]), name: reqDoctor.name || `${reqDoctor.first_name || ''} ${reqDoctor.last_name || ''}`.trim() } : null,
+                technician: reqTechnician ? { id: reqTechnician.id, username: reqTechnician.username || reqTechnician.name || (reqTechnician.email && reqTechnician.email.split('@')?.[0]), name: reqTechnician.name || `${reqTechnician.first_name || ''} ${reqTechnician.last_name || ''}`.trim() } : null
+            } : null;
+
+            return {
+                ...r,
+                labRequest: enrichedReq,
+                patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')?.[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+                technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')?.[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+            };
+        });
+        return res.json({ success: true, labResults: enriched, count: enriched.length });
+    } catch (err) {
+        console.error('Error in /api/lab-results:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch lab results' });
+    }
+});
+
+app.get('/api/doctor/lab-results', (req, res) => {
+    console.log('🔎 /api/doctor/lab-results requested');
+    // Reuse the same logic
+    try {
+        const enriched = labResults.map(r => {
+            const patient = (typeof r.patient === 'object' && r.patient) || patients.find(p => p.id === r.patientId) || users.find(u => u.id === r.patientId) || null;
+            const technician = (typeof r.technician === 'object' && r.technician) || (r.technicianId ? users.find(u => u.id === r.technicianId) : null);
+            const reqItem = labRequests.find(lr => lr.id === r.labRequestId) || null;
+            const reqPatient = reqItem ? ((typeof reqItem.patient === 'object' && reqItem.patient) || patients.find(p => p.id === reqItem.patientId) || users.find(u => u.id === reqItem.patientId) || null) : null;
+            const reqDoctor = reqItem ? ((typeof reqItem.doctor === 'object' && reqItem.doctor) || (reqItem.doctorId ? users.find(u => u.id === reqItem.doctorId) : null)) : null;
+            const reqTechnician = reqItem ? ((typeof reqItem.technician === 'object' && reqItem.technician) || (reqItem.technicianId ? users.find(u => u.id === reqItem.technicianId) : null)) : null;
+            const enrichedReq = reqItem ? {
+                ...reqItem,
+                patient: reqPatient ? { id: reqPatient.id, username: reqPatient.username || reqPatient.name || (reqPatient.email && reqPatient.email.split('@')?.[0]), name: reqPatient.name || `${reqPatient.first_name || ''} ${reqPatient.last_name || ''}`.trim() } : null,
+                doctor: reqDoctor ? { id: reqDoctor.id, username: reqDoctor.username || reqDoctor.name || (reqDoctor.email && reqDoctor.email.split('@')?.[0]), name: reqDoctor.name || `${reqDoctor.first_name || ''} ${reqDoctor.last_name || ''}`.trim() } : null,
+                technician: reqTechnician ? { id: reqTechnician.id, username: reqTechnician.username || reqTechnician.name || (reqTechnician.email && reqTechnician.email.split('@')?.[0]), name: reqTechnician.name || `${reqTechnician.first_name || ''} ${reqTechnician.last_name || ''}`.trim() } : null
+            } : null;
+
+            return {
+                ...r,
+                labRequest: enrichedReq,
+                patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')?.[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+                technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')?.[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+            };
+        });
+        return res.json({ success: true, labResults: enriched, count: enriched.length });
+    } catch (err) {
+        console.error('Error in /api/doctor/lab-results:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch lab results' });
+    }
+});
+
+// ADMIN DEBUG: Patch in-memory lab requests that are missing doctorId (dev convenience)
+app.post('/api/admin/patch-missing-doctors', (req, res) => {
+    try {
+        let patched = 0;
+        labRequests = labRequests.map(lr => {
+            if (!lr.doctorId) {
+                const defaultDoc = users.find(u => u.role === 'doctor') || users[0] || null;
+                if (defaultDoc) {
+                    lr.doctorId = defaultDoc.id;
+                    lr.doctor = { id: defaultDoc.id, username: defaultDoc.username || defaultDoc.email?.split('@')?.[0], name: defaultDoc.name || `${defaultDoc.first_name || ''} ${defaultDoc.last_name || ''}`.trim() };
+                    patched++;
+                }
+            }
+            return lr;
+        });
+        console.log(`Patched ${patched} lab requests to include default doctor`);
+        res.json({ success: true, patched, data: labRequests });
+    } catch (err) {
+        console.error('Failed to patch lab requests:', err);
+        res.status(500).json({ success: false, error: 'Failed to patch lab requests' });
+    }
 });
 
 // GET a single test details (lab request + optional result)
@@ -2287,7 +2548,28 @@ app.get('/api/lab/test/:id', (req, res) => {
     const reqItem = labRequests.find(lr => lr.id === id);
     const result = labResults.find(r => r.labRequestId === id);
     if (!reqItem) return res.status(404).json({ success: false, error: 'Lab request not found' });
-    return res.json({ success: true, data: { request: reqItem, result } });
+
+    // enrich request with patient/doctor/technician objects
+    const patient = (typeof reqItem.patient === 'object' && reqItem.patient) || patients.find(p => p.id === reqItem.patientId) || users.find(u => u.id === reqItem.patientId) || null;
+    const doctor = (typeof reqItem.doctor === 'object' && reqItem.doctor) || (reqItem.doctorId ? users.find(u => u.id === reqItem.doctorId) : null);
+    const technician = (typeof reqItem.technician === 'object' && reqItem.technician) || (reqItem.technicianId ? users.find(u => u.id === reqItem.technicianId) : null);
+
+    const enriched = {
+        ...reqItem,
+        patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+        doctor: doctor ? { id: doctor.id, username: doctor.username || doctor.name || (doctor.email && doctor.email.split('@')[0]), name: doctor.name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() } : null,
+        technician: technician ? { id: technician.id, username: technician.username || technician.name || (technician.email && technician.email.split('@')[0]), name: technician.name || `${technician.first_name || ''} ${technician.last_name || ''}`.trim() } : null
+    };
+
+    // Enrich the associated result (if any) with patient and technician objects as well
+    const enrichedResult = result ? {
+        ...result,
+        labRequest: enriched, // attach the enriched lab request so frontend can rely on result.labRequest.patient
+        patient: patient ? { id: patient.id, username: patient.username || patient.name || (patient.email && patient.email.split('@')?.[0]), name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : null,
+        technician: (typeof result.technician === 'object' && result.technician) || (result.technicianId ? (users.find(u => u.id === result.technicianId) ? { id: result.technicianId, username: (users.find(u => u.id === result.technicianId).username || users.find(u => u.id === result.technicianId).name), name: (users.find(u => u.id === result.technicianId).name) } : null) : null)
+    } : null;
+
+    return res.json({ success: true, data: { request: enriched, result: enrichedResult } });
 });
 
 // Technician accepts a test request (assigns to technician and marks in-progress)
