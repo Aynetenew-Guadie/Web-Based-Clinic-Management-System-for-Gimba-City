@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import AuthContext from '../../contexts/AuthContext';
 import api from '../../services/apiService'; // Import the API service
 import './loginStyles.css';
@@ -285,9 +285,9 @@ const Login = () => {
                                 <div className="text-sm text-gray-500">Password resets are handled by the administrator.</div>
                             ) : (
                                 <div className="text-sm">
-                                    <a href="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
+                                    <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
                                         Forgot your password?
-                                    </a>
+                                    </Link>
                                 </div>
                             )}
                     </div>
