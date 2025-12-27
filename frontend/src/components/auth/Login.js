@@ -1,6 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthContext from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/apiService'; // Import the API service
 import './loginStyles.css';
 
@@ -54,7 +55,9 @@ const Login = () => {
     }, []);
     
     const { login, error, clearError } = useContext(AuthContext);
+    const { user, isAuthenticated, logout } = useAuth();
     const navigate = useNavigate();
+    const [showAlreadySignedIn, setShowAlreadySignedIn] = useState(false);
 
     // Test server connection
     const testServerConnection = async () => {
@@ -285,9 +288,19 @@ const Login = () => {
                                 <div className="text-sm text-gray-500">Password resets are handled by the administrator.</div>
                             ) : (
                                 <div className="text-sm">
-                                    <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
+                                    <Link to="/forgot-password" onClick={(e) => { if (isAuthenticated) { e.preventDefault(); setShowAlreadySignedIn(true); } }} className="font-medium text-indigo-600 hover:text-indigo-500">
                                         Forgot your password?
                                     </Link>
+                                </div>
+                            )}
+
+                            {showAlreadySignedIn && isAuthenticated && (
+                                <div className="mt-3 card">
+                                    <p className="text-sm text-gray-700">You are currently signed in as <strong>{user?.username || user?.email || user?.role}</strong>.</p>
+                                    <div className="flex items-center justify-between mt-3">
+                                        <button type="button" className="btn-outline-soft" onClick={() => navigate(user?.role === 'admin' ? '/admin' : `/${user?.role?.replace('_', '')}`)}>Go to Dashboard</button>
+                                        <button type="button" className="btn-primary" onClick={async () => { await logout(); setShowAlreadySignedIn(false); navigate('/forgot-password'); }}>Sign out & reset</button>
+                                    </div>
                                 </div>
                             )}
                     </div>
