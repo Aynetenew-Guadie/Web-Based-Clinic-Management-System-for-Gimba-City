@@ -288,9 +288,20 @@ const Login = () => {
                                 <div className="text-sm text-gray-500">Password resets are handled by the administrator.</div>
                             ) : (
                                 <div className="text-sm">
-                                    <Link to="/forgot-password" onClick={(e) => { if (isAuthenticated) { e.preventDefault(); setShowAlreadySignedIn(true); } }} className="font-medium text-indigo-600 hover:text-indigo-500">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            if (isAuthenticated) {
+                                                setShowAlreadySignedIn(true);
+                                            } else {
+                                                navigate('/forgot-password');
+                                            }
+                                        }}
+                                        className="font-medium text-indigo-600 hover:text-indigo-500 bg-transparent border-0 p-0"
+                                    >
                                         Forgot your password?
-                                    </Link>
+                                    </button>
                                 </div>
                             )}
 
