@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import BackButton from '../common/BackButton';
+import { useAuth } from '../../contexts/AuthContext';
 import { Mail, ArrowLeft, Building2 } from 'lucide-react';
 import api from '../../services/apiService';
 import toast from 'react-hot-toast';
@@ -15,6 +16,9 @@ const ForgotPassword = () => {
   const isDev = process.env.NODE_ENV !== 'production';
   const isAdminOnly = process.env.REACT_APP_ADMIN_ONLY_PASSWORD_RESET === 'true';
 
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
+
   // If admin-only mode is enabled, pre-set the disabled message so the form is not shown
   React.useEffect(() => {
     if (isAdminOnly) {
@@ -22,6 +26,57 @@ const ForgotPassword = () => {
       setDisabledMessage('Self-service password resets have been disabled. Please contact your system administrator to reset your password.');
     }
   }, [isAdminOnly]);
+
+  // If a user is already authenticated, show guidance instead of navigating blindly
+  if (isAuthenticated) {
+    const roleRoutes = {
+      patient: '/patient',
+      doctor: '/doctor',
+      receptionist: '/reception',
+      lab_technician: '/lab',
+      pharmacist: '/pharmacist',
+      admin: '/admin'
+    };
+
+    const goToDashboard = () => {
+      const dest = roleRoutes[user?.role] || '/dashboard';
+      navigate(dest);
+    };
+
+    const handleSignOutThenReset = async () => {
+      try {
+        await logout();
+        // navigate to the same route so the component re-renders and shows the reset form
+        navigate('/forgot-password');
+      } catch (err) {
+        console.error('Sign out failed:', err);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 bg-yellow-400 rounded-full flex items-center justify-center mb-4">
+              <Building2 className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Already Signed In</h2>
+            <p className="text-gray-600">You are currently signed in as <strong>{user?.username || user?.email || user?.role}</strong>. To reset your password, sign out and then request a reset link.</p>
+          </div>
+
+          <div className="card text-center space-y-3">
+            <div className="flex items-center justify-center space-x-3">
+              <button onClick={goToDashboard} className="btn-outline-soft">Go to Dashboard</button>
+              <button onClick={handleSignOutThenReset} className="btn-primary">Sign Out & Reset</button>
+            </div>
+            <div className="mt-4">
+              <Link to="/" className="text-sm text-gray-500">Return Home</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
