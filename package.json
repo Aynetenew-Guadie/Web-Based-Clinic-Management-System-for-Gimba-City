@@ -1,0 +1,34 @@
+{
+  "dependencies": {
+    "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.2.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.14.3",
+    "nodemailer": "^7.0.5",
+    "react-hot-toast": "^2.6.0",
+    "sequelize": "^6.37.7",
+    "twilio": "^5.8.0"
+  },
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "NODE_ENV=development nodemon backend/server.js",
+    "db:init": "node backend/scripts/initDatabase.js",
+    "db:reset": "node backend/scripts/initDatabase.js reset",
+    "db:sync": "NODE_ENV=development node -e \"require('./backend/config/database').sequelize.sync({alter: true}).then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1);})\"",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "create-superuser": "node scripts/createSuperuser.js"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

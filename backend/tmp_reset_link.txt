@@ -1,0 +1,1 @@
+http://localhost:3000/reset-password/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImF5bmV0ZW5ldzE5MjFAZ21haWwuY29tIiwiaWF0IjoxNzY2NDg1MDg5LCJleHAiOjE3NjY0ODg2ODl9.qjnmCQtRj9L-y7OPw2wfnMuEZ22vy4xrCFjnvNzU5EA

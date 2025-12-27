@@ -1,0 +1,24 @@
+
+console.log('ESLint Fix Guide:');
+console.log('');
+console.log('1. CRITICAL ERRORS FIXED:');
+console.log('   ✅ confirm() -> window.confirm() in AdminSettings.js');
+console.log('   ✅ confirm() -> window.confirm() in AdminUsers.js');
+console.log('   ✅ href="#" -> button in Login.js');
+console.log('   ✅ Removed unused imports in AuthContext.js');
+console.log('');
+console.log('2. TO FIX WARNINGS (unused imports):');
+console.log('   - Remove unused icon imports from admin components');
+console.log('   - Remove unused icon imports from doctor components');
+console.log('   - Remove unused icon imports from lab components');
+console.log('   - Remove unused icon imports from patient components');
+console.log('   - Remove unused icon imports from receptionist components');
+console.log('');
+console.log('3. QUICK FIX COMMANDS:');
+console.log('   npm run build  # Check if critical errors are fixed');
+console.log('   npm start      # Start development server');
+console.log('');
+console.log('4. OPTIONAL: Fix all warnings by removing unused imports');
+console.log('   - Look for "is defined but never used" warnings');
+console.log('   - Remove those specific import lines');
+console.log('   - Or add // eslint-disable-next-line no-unused-vars above them');
